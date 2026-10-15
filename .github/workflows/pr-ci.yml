@@ -18,13 +18,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-java@v4
+          cache: npm
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - name: Temporary lock bootstrap (M0 only)
-        run: npm install --package-lock-only --no-audit --no-fund
-      - name: Install from resolved lock
+      - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Lint
         run: npm run lint
@@ -36,9 +35,3 @@ jobs:
         run: npm run test:rules
       - name: Production build
         run: npm run build
-      - name: Upload lockfile to commit before M0 completion
-        uses: actions/upload-artifact@v4
-        with:
-          name: m0-package-lock
-          path: package-lock.json
-          retention-days: 3
