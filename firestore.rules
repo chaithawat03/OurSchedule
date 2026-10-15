@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // M0: explicit deny all. No real client reads or writes before audited rules.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

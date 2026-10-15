@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.firebase/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+*.tsbuildinfo
+.DS_Store
+service-account*.json
+**/*serviceAccount*.json
