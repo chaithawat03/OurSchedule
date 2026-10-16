@@ -71,7 +71,7 @@ export async function listJoinedRooms(user: User): Promise<JoinedRoom[]> {
     where('uid', '==', user.uid),
     limit(20),
   ));
-  const joined = memberships.docs.filter((item) => item.data().role === 'member');
+  const joined = memberships.docs.filter((item) => item.data().role === 'member' && item.data().membershipState === 'active');
   const rooms = await Promise.all(joined.map(async (membership) => {
     const roomRef = membership.ref.parent.parent;
     if (!roomRef || roomRef.parent.id !== 'rooms') return null;

@@ -238,7 +238,6 @@ service cloud.firestore {
     match /{path=**}/members/{memberId} {
       allow list: if signedIn()
         && resource.data.uid == request.auth.uid
-        && resource.data.membershipState == 'active'
         && request.query.limit != null && request.query.limit <= 20;
     }
 
