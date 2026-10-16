@@ -1,7 +1,7 @@
 # M2.2a: single-use invited Member — source-only proposal
 
 ## Scope
-No production or staging activation. This PR introduces a **2-day maximum**, single-use room invitation using a 256-bit random bearer capability, restricted to authenticated invite holders, and atomic Member acceptance. Owner issuance/revocation and Member redemption only. **No** Admin assignment, owner transfer, member removal, room discovery, bulk invitations, phone aliases, event sharing or private activity data.
+No production or staging activation. This PR introduces a **2-day maximum**, single-use room invitation using a 256-bit random bearer capability, restricted to authenticated invite holders, and atomic Member acceptance. Owner issuance/revocation, Member redemption, removal/self-leave and bounded joined-room discovery. **No** Admin assignment, owner transfer, bulk invitations, phone aliases, event sharing or private activity data.
 
 The token is a 43-character Base64URL identifier generated with browser Web Crypto, placed in a URL **fragment** (\`#invite=\`) so it is not sent as a query string or in normal HTTP Referer headers. Anyone who obtains the token can attempt to join, after Firebase sign-in; this is intentional bearer behavior. Sharing or screenshotting the link grants access. The token is displayed only at issuance and should not be copied into analytics, logs or console.
 
@@ -15,10 +15,10 @@ The token is a 43-character Base64URL identifier generated with browser Web Cryp
 - Room owner cannot be deleted/demoted and room data immutable ownership remains protected.
 
 ## Known risks / release blockers
-1. **Client-only Rules cannot impose robust per-user rate limits** on issuing invites, making rooms or repeated reads. Prior to Staging activation on a public site, decide whether an App Check, trusted server, explicit quota and monitoring are necessary. A link can be forwarded, so invite acceptor is not bound to email/phone.
-2. Member room list across sessions is not implemented: joining a room shows the newly joined room in the current app session, but this phase does not yet provide an indexed per-user membership projection.
-3. Room Owner can remove a Member and a Member can leave; **Owner** cannot be deleted. However Admin role changes, owner transfer, per-room member pagination and post-reload joined-room discovery are not yet implemented.
-4. Android/iOS sign-in and live cross-UID Firestore access tests are required. M1 live Cross-UID proof remains outstanding.
+1. **Per-UID Rules-enforced counters** now limit room and invitation issuance. However neither client Rules nor these UID counters impose robust per-IP/device or global multi-account limits. Prior to public activation, decide whether App Check, trusted server throttling and cost alerts are required. A link can be forwarded, so invite acceptor is not bound to email/phone.
+2. Member room list after refresh is implemented using a bounded `members` collection-group UID query and explicit index. The index has **not been deployed** and its readiness must be verified on STAGING. Pagination after the first 20 membership documents is not yet implemented.
+3. Room Owner can remove a Member and a Member can leave; **Owner** cannot be deleted. However Admin role changes, owner transfer and both member/room pagination are not yet implemented.
+4. M1 live cross-UID **READ isolation passed 6/6** on Staging (using a temporary anonymous identity, since removed and Provider subsequently confirmed Disabled). Live **WRITE** denial and M2 invite/revoke E2E acceptance plus Android/iOS remain pending.
 5. Developers must re-check Firestore Security Rules evaluation limits (getAfter/get calls) and transaction concurrency under real conditions before deployment.
 6. Prior full npm audit residual development vulnerabilities remain tracked in #5.
 

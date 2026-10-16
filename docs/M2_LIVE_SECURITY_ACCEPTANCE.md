@@ -38,7 +38,9 @@ For end-to-end Google provider acceptance, use **Test Account A** and **Test Acc
 | Member removal/self-leave and revocation | Emulator: PASS |
 | M1 live Firestore foreign-UID **READ** denial | **PASS** — user-reported staging REST 2026-10-16: 6/6; Anonymous B deleted |
 | M1 live foreign-UID **WRITE** denial | **PENDING** — emulator tested; no live write attempts |
-| A/B live invite and revocation security | **PENDING** |
+| A/B live invite and revocation security | **PENDING** — requires controlled Staging release |
+| Joined-room discovery authorization (Emulator) | **PASS** — own UID-scoped group query, foreign/global denied, revoke disappears; live index not deployed |
+| Member collection-group index on Staging | **PENDING** — deploy and wait READY before UI rollout |
 | App Check + spending monitoring or approved equivalent abuse plan | **PENDING** |
 | Public share approval | **BLOCKED** |
 | Production deployment | **NOT AUTHORIZED** |
@@ -92,3 +94,11 @@ Official: https://firebase.google.com/docs/auth/web/anonymous-auth and https://f
 The staging operator reports all 6 checks of `scripts/staging-auth-isolation.mjs` passed with HTTP status results: temporary Anonymous B own missing profile **404**; B get Google A profile **403**; unsigned get A profile **403**; B users collection listing **403**; B read A private events **403**; B global rooms listing **403**. Script reports test Anonymous Firebase Auth user **deleted successfully**. These results are evidence of actual staging Firestore Rules enforcement for those read cases, not just Emulator execution. No private UIDs/API keys or ID tokens were retained in the issue or runbook.
 
 **Operator action remains:** Anonymous Sign-in Provider should be **disabled immediately** and verified in staging Authentication Console (this setting is not toggled by the script). Temporary B being deleted does **not** establish Anonymous Provider is off. M1 live **write** denial and M2 invite/join/revoke end-to-end acceptance are **not established** by this read-only test. Do not describe M2 as Staging Verified or deploy PR #10 solely because this subset passed.
+
+## 2026-10-16 — Operator provider-disable confirmation
+
+Owner provided a Firebase Authentication > Sign-in method screenshot from Staging `ourschedule` with **Google: Enabled** and **Anonymous: Disabled**. This confirms the temporary Anonymous Sign-in provider is now off after the 6/6 live cross-UID read check. The read-only test reported successful deletion of its temporary anonymous Auth user; the screenshot of provider status does not independently verify the Users list or account-deletion completion.
+
+## M2.2 joined-room discovery review
+
+Draft PR #10 adds a `members` collection-group query constrained by `where('uid','==', auth.uid)` and `limit(20)`, plus a Rules `allow list` check binding `resource.data.uid` to the requesting UID. Emulator positive + adversarial tests verify matching memberships are returned, global/foreign/unbounded queries denied, and revoked memberships disappear. The group-scope single-field `members.uid` index is declared in `firestore.indexes.json`. **Before a future approved Staging release** deploy `firestore:indexes`, wait until the index reports READY, and only then deploy the reviewed Rules and Hosting and smoke test real re-login / member leave. Do not deploy PR Draft index/rules to the live project merely because Emulator tests are green.
