@@ -10,9 +10,9 @@ Repository `main` is still at M2.1, and Firebase Staging Hosting/Rules remain M1
 - Strict locked dependencies; `npm audit --omit=dev --audit-level=high` 0; patched grpc lock check; ESLint, TypeScript, unit tests and build PASS.
 - Full development audit findings tracked in #5 separately; green CI is not a production security sign-off.
 
-## Staging live negative checks (requires two *real* Google sign-ins, no shared passwords/tokens)
+## Staging live negative checks (two distinct Firebase-authenticated UIDs; no shared passwords/tokens)
 
-Use **Test Account A** and **Test Account B** in separate clean browser profiles. Never put Auth ID tokens or private emails in a GitHub comment or screenshot. Preserve just PASS/FAIL and redacted timestamps.
+For end-to-end Google provider acceptance, use **Test Account A** and **Test Account B** in separate clean browser profiles. For the UID Rules read-isolation subset, use the temporary Anonymous Auth approach documented below. Never put Auth ID tokens or private emails in a GitHub comment or screenshot. Preserve just PASS/FAIL and redacted timestamps.
 
 1. M1 baseline: A and B sign in. Check each has exactly one `users/{uid}` profile in the staging Firestore Console. A must not read or alter B's profile, and vice versa. Anonymous profile reads, `users` collection query and access to `users/{uid}/personalEvents` must be rejected. Emulator PASS does not establish this live check.
 2. Only after rules security review and staging rules deployment, A creates one room and sees its Owner membership; B cannot directly get that room or enumerate A's rooms without an invite.
@@ -54,3 +54,34 @@ Code supports an optional Vite environment variable \`VITE_RECAPTCHA_V3_SITE_KEY
 5. App Check does not replace User Auth, Firestore Rules, per-UID quotas or global/budget monitoring. It does not prevent all device farms or multi-account abuse.
 
 Official Firebase guidance: https://firebase.google.com/docs/app-check/web/recaptcha-provider
+
+## Alternative when there is only one Google account
+
+**No second Google account is needed for the LIVE UID-isolation READ gate.** Use Google Account A (existing profile in Staging Firestore) and a temporary **Firebase Anonymous Auth** identity B. Anonymous B has a distinct authenticated Firebase UID. This is a real Firestore Rules request, not a Rules Playground simulation. It tests authorization for principal B to get A's profile, read A's private events and list protected collections. It does **not** test B's Google provider flow and does not replace the full M2 room invitation, Member, revoke or WRITE tests.
+
+Before starting: only on the *current M1 staging rules* and during an attended test window, enable **Anonymous** in Firebase Console > Authentication > Sign-in method for staging \`ourschedule\`. **Temporarily enabling this provider increases public sign-up exposure**. Anonymous users are authenticated, and any rule permitting \`request.auth != null\` may also permit their actions. Do not enable this on Production or for an unattended period. M2 Rooms/Invites must NOT be publicly enabled at the time of this test.
+
+From Google Cloud Shell (keeping \`.env.local\` and other local working files intact), execute this signed-in-user **read-only** script from PR #10 without deploying that PR:
+
+\`\`\`bash
+cd ~/OurSchedule
+git fetch origin feature/m2-invites-single-use
+
+# Inspect the current reviewed script revision first:
+git show FETCH_HEAD:scripts/staging-auth-isolation.mjs | less
+
+# Export into a temporary file to avoid checking out draft Firestore Rules.
+git show FETCH_HEAD:scripts/staging-auth-isolation.mjs > /tmp/ourschedule-staging-isolation.mjs
+
+read -r -p "Existing Google user's UID from STAGING Firestore > users: " OWNER_UID
+export OWNER_UID
+node --env-file=.env.local /tmp/ourschedule-staging-isolation.mjs
+unset OWNER_UID
+rm -f /tmp/ourschedule-staging-isolation.mjs
+\`\`\`
+
+Do **not** paste the Google user's UID, Web API key, private tokens or personal profile document into a chat or GitHub issue. Script checks project \`ourschedule\` and Staging Firebase App ID, uses Identity Toolkit REST to create an anonymous test user, confirms the new identity, and sends Firestore REST **Firebase ID token** requests (unlike privileged Cloud Shell Admin SDK operations). It checks own missing profile returns 404 and protected read operations return 403. It does **no Firestore writes** and attempts to delete the test Auth user automatically. A FAIL is a real security stop. If cleanup fails, remove the anonymous user manually in Firebase Console > Authentication > Users.
+
+**Immediately disable Anonymous Provider after completion**, even if the test fails, and verify no unwanted anonymous users were created during the enablement window. Live cross-UID **write** denial still relies on Emulator tests until a separate, explicit non-destructive live write test is designed. This temporary-identity test should not be mistaken for a complete M2 release sign-off.
+
+Official: https://firebase.google.com/docs/auth/web/anonymous-auth and https://firebase.google.com/docs/firestore/use-rest-api .
