@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import IdentityPanel from './features/identity/IdentityPanel';
+import RoomPanel from './features/rooms/RoomPanel';
+import { useIdentity } from './features/identity/useIdentity';
 import { bangkokYearMonth, monthGrid, shiftMonth } from './lib/monthGrid';
 
 type View = 'day' | 'month' | 'multi';
@@ -27,6 +29,7 @@ function Month({ year, monthIndex, selected, onSelect }: {
 }
 
 export default function App() {
+  const identity = useIdentity();
   const today = useMemo(() => bangkokYearMonth(new Date()), []);
   const [cursor, setCursor] = useState({ year: today.year, monthIndex: today.monthIndex });
   const [view, setView] = useState<View>('month');
@@ -41,22 +44,23 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand"><div className="mark">OS</div><div><strong>OurSchedule</strong><small>ปฏิทินของเรา</small></div></div>
-        <span className="phase">M1 IDENTITY</span>
+        <span className="phase">M2 ROOM OWNERSHIP</span>
       </header>
       <div className="workspace">
         <aside className="sidebar">
           <p className="section-name">MY WORKSPACE</p>
           <div className="nav-current">ปฏิทินส่วนตัว</div>
           <p className="section-name room-heading">ROOMS</p>
-          <p className="aside-note">การสร้างห้องจะเปิดใช้งานใน Milestone 2</p>
-          <div className="aside-warning">M1: เปิดสิทธิ์เฉพาะโปรไฟล์ของตนเอง ส่วนกิจกรรมและห้องยังปิดอยู่</div>
+          <p className="aside-note">สร้างห้องส่วนตัวได้แล้ว การเชิญสมาชิกจะเปิดใน M2 ระยะถัดไป</p>
+          <div className="aside-warning">M2: ห้องที่สร้างยังเป็นส่วนตัว ไม่เปิดรับสมาชิกหรือกิจกรรมจนกว่ากฎการแชร์จะผ่านการตรวจสอบ</div>
         </aside>
         <main className="content">
           <div className="heading-row">
             <div><p className="eyebrow">CALENDAR FOUNDATION</p><h1>ตารางกิจกรรม</h1><p className="subtitle">เข้าสู่ระบบด้วย Google เพื่อใช้งานบัญชีส่วนตัว ฟังก์ชันกิจกรรมจะพัฒนาใน M3</p></div>
             <span className="preview-pill">Preview only</span>
           </div>
-          <IdentityPanel />
+          <IdentityPanel identity={identity} />
+          <RoomPanel user={identity.state.status === 'ready' ? identity.state.user : null} />
           <div className="toolbar">
             <div className="nav-month">
               <button type="button" onClick={() => navigate(-1)} aria-label="เดือนก่อนหน้า">‹</button>
@@ -78,7 +82,7 @@ export default function App() {
               {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={setSelected} />}
             </div>
           )}
-          <p className="footnote">● M1: โปรไฟล์ส่วนตัวเท่านั้น ยังไม่เข้าถึงกิจกรรม <span>·</span> {dateHeading}</p>
+          <p className="footnote">● M2: โปรไฟล์และห้องที่สร้างเองเท่านั้น กิจกรรมยังไม่เปิดใช้งาน <span>·</span> {dateHeading}</p>
         </main>
       </div>
     </div>
