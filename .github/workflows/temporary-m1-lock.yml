@@ -1,0 +1,30 @@
+name: TEMP M1 lockfile refresh
+on:
+  push:
+    branches: [feature/m1-google-identity]
+permissions:
+  contents: write
+jobs:
+  lock:
+    if: github.repository == 'chaithawat03/OurSchedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/m1-google-identity
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Re-resolve lockfile without lifecycle scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit regenerated lockfile to M1 feature branch only
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(m1): resolve Firebase runtime dependency lockfile"
+            git push origin HEAD:feature/m1-google-identity
+          fi
