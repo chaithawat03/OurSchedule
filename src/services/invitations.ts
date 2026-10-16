@@ -1,7 +1,8 @@
 import type { User } from 'firebase/auth';
-import { Timestamp, doc, getDoc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { Timestamp, doc, getDoc, runTransaction, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
 import { generateInviteToken, parseInviteToken } from '../lib/invites';
+import { consumeQuota } from './quota';
 
 function dbFor(user: User) {
   if (!firebaseClient || !user.uid) throw new Error('กรุณาเข้าสู่ระบบก่อน');
@@ -18,15 +19,13 @@ export interface InviteSummary {
 export async function createRoomInvite(user: User, roomId: string): Promise<string> {
   const db = dbFor(user);
   const token = generateInviteToken();
-  // Less than 48h to account for minor client-server clock skew. Rules enforce <=48h.
-  const expiresAt = Timestamp.fromMillis(Date.now() + 47 * 60 * 60 * 1000);
-  await writeBatchInvite();
-  return token;
-
-  async function writeBatchInvite(): Promise<void> {
-    const ref = doc(db, 'roomInvites', token);
-    const batch = writeBatch(db);
-    batch.set(ref, {
+  const ref = doc(db, 'roomInvites', token);
+  await runTransaction(db, async (transaction) => {
+    const quota = await consumeQuota(transaction, db, user.uid, 'invites', token);
+    // Server Rules validate expiry, issuer and ownership, not client trust.
+    const expiresAt = Timestamp.fromMillis(Date.now() + 47 * 60 * 60 * 1000);
+    transaction.set(quota.ref, quota.next);
+    transaction.set(ref, {
       roomId,
       createdByUid: user.uid,
       createdAt: serverTimestamp(),
@@ -35,8 +34,8 @@ export async function createRoomInvite(user: User, roomId: string): Promise<stri
       acceptedByUid: null,
       acceptedAt: null,
     });
-    await batch.commit();
-  }
+  });
+  return token;
 }
 
 export async function inspectRoomInvite(user: User, rawToken: string): Promise<InviteSummary> {

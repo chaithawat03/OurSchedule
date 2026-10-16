@@ -23,3 +23,10 @@ The token is a 43-character Base64URL identifier generated with browser Web Cryp
 6. Prior full npm audit residual development vulnerabilities remain tracked in #5.
 
 **Never deploy these Rules to Staging or Production until CI, security/abuse review and the independent live M1 security gate have been accepted.** This PR is deliberately kept Draft.
+
+
+## Per-account transactional limits (M2.2a revision)
+
+Rooms are capped at **3 per 24-hour rolling window per Firebase UID**, and invitation issuance at **10 per 24-hour rolling window per UID**. Persist fixed-counter documents `users/{uid}/quotas/{rooms|invites}` with count, windowStart, updatedAt and lastResourceId. A room/invite creation must atomically transition its matching counter using `getAfter`; lastResourceId ties the counter to exactly one new resource per batch, preventing a single increment paying for multiple writes. Counters have strict schema, immutable valid window semantics, are owner-readable only, non-listable, and cannot be deleted. SDK uses `runTransaction` so concurrent attempts retry rather than lose quota updates. Tests assert quota forgery, reuse, cap, expiration and account isolation.
+
+These limits block straightforward per-UID high-rate creation **even from a modified client**. They DO NOT provide IP/device/global limits, nor stop malicious people from creating many Auth accounts; App Check, budget alerting and/or a trusted server are separate release gates for public access. If a device clock is wrong, client creation may be denied by Rules (fail closed). Do not treat this as a complete abuse-control system.

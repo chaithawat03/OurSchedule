@@ -1,9 +1,10 @@
 import type { User } from 'firebase/auth';
 import {
-  collection, doc, getDocs, limit, query, serverTimestamp, where, writeBatch,
+  collection, doc, getDocs, limit, query, runTransaction, serverTimestamp, where,
 } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
 import { validateRoomName } from '../lib/roomName';
+import { consumeQuota } from './quota';
 
 export interface OwnedRoom {
   id: string;
@@ -22,28 +23,30 @@ export async function createOwnedRoom(user: User, nameInput: string): Promise<st
   const name = validateRoomName(nameInput);
   const roomRef = doc(collection(db, 'rooms'));
   const ownerMemberRef = doc(db, 'rooms', roomRef.id, 'members', user.uid);
-  const batch = writeBatch(db);
-  batch.set(roomRef, {
-    ownerUid: user.uid,
-    name,
-    assignmentPolicy: 'REQUIRE_ACCEPTANCE',
-    defaultVisibility: 'PRIVATE',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  await runTransaction(db, async (transaction) => {
+    // All reads must happen before any transaction writes.
+    const quota = await consumeQuota(transaction, db, user.uid, 'rooms', roomRef.id);
+    transaction.set(quota.ref, quota.next);
+    transaction.set(roomRef, {
+      ownerUid: user.uid,
+      name,
+      assignmentPolicy: 'REQUIRE_ACCEPTANCE',
+      defaultVisibility: 'PRIVATE',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    transaction.set(ownerMemberRef, {
+      uid: user.uid,
+      role: 'owner',
+      membershipState: 'active',
+      joinedAt: serverTimestamp(),
+    });
   });
-  batch.set(ownerMemberRef, {
-    uid: user.uid,
-    role: 'owner',
-    membershipState: 'active',
-    joinedAt: serverTimestamp(),
-  });
-  await batch.commit();
   return roomRef.id;
 }
 
 export async function listOwnedRooms(user: User): Promise<OwnedRoom[]> {
   const db = dbForUser(user);
-  // No unbounded or global room query. Pagination must precede lifting this cap.
   const results = await getDocs(query(collection(db, 'rooms'), where('ownerUid', '==', user.uid), limit(20)));
   return results.docs.map((snapshot) => ({
     id: snapshot.id,
