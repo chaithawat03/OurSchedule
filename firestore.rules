@@ -44,7 +44,62 @@ service cloud.firestore {
     }
 
     function validInviteToken(token) {
-      return token is string && token.matches('^[A-Za-z0-9_-]{43}
+      return token is string && token.matches('^[A-Za-z0-9_-]{43}$');
+    }
+
+    function activeMembership(roomId, uid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid))
+        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid)).data.uid == uid
+        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid)).data.membershipState == 'active';
+    }
+
+    function joinedMemberValid(data, uid) {
+      return data.keys().hasAll(['uid', 'role', 'membershipState', 'joinedAt', 'inviteId'])
+        && data.keys().hasOnly(['uid', 'role', 'membershipState', 'joinedAt', 'inviteId'])
+        && data.uid == uid && data.role == 'member'
+        && data.membershipState == 'active'
+        && data.joinedAt is timestamp && data.joinedAt == request.time
+        && validInviteToken(data.inviteId);
+    }
+
+    function inviteShapeValid(data) {
+      return data.keys().hasAll(['roomId', 'createdByUid', 'createdAt', 'expiresAt',
+                                 'state', 'acceptedByUid', 'acceptedAt'])
+        && data.keys().hasOnly(['roomId', 'createdByUid', 'createdAt', 'expiresAt',
+                                 'state', 'acceptedByUid', 'acceptedAt'])
+        && data.roomId is string && data.roomId.size() > 0 && data.roomId.size() <= 120
+        && data.createdByUid is string && data.createdByUid.size() > 0
+        && data.createdAt is timestamp && data.expiresAt is timestamp
+        && data.state in ['pending', 'accepted', 'revoked']
+        && (data.acceptedByUid == null || data.acceptedByUid is string)
+        && (data.acceptedAt == null || data.acceptedAt is timestamp);
+    }
+
+    function validInviteAcceptance(inviteId) {
+      return request.resource.data.state == 'accepted'
+        && request.resource.data.acceptedByUid == request.auth.uid
+        && request.resource.data.acceptedAt == request.time
+        && exists(/databases/$(database)/documents/rooms/$(resource.data.roomId))
+        && get(/databases/$(database)/documents/rooms/$(resource.data.roomId)).data.ownerUid != request.auth.uid
+        && !exists(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.role == 'member'
+        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.membershipState == 'active'
+        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.inviteId == inviteId;
+    }
+
+    function validJoinFromInvite(roomId, uid, inviteId) {
+      return exists(/databases/$(database)/documents/roomInvites/$(inviteId))
+        && get(/databases/$(database)/documents/roomInvites/$(inviteId)).data.state == 'pending'
+        && get(/databases/$(database)/documents/roomInvites/$(inviteId)).data.expiresAt > request.time
+        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.state == 'accepted'
+        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.acceptedByUid == uid
+        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.acceptedAt == request.time
+        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.roomId == roomId;
+    }
+
+    function roomFieldsValid(data) {
       return data.keys().hasAll(['ownerUid', 'name', 'assignmentPolicy', 'defaultVisibility', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['ownerUid', 'name', 'assignmentPolicy', 'defaultVisibility', 'createdAt', 'updatedAt'])
         && data.ownerUid is string && data.ownerUid.size() > 0
@@ -148,127 +203,6 @@ service cloud.firestore {
     }
 
     // All personal events, projections and unapproved collections remain closed.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-}
-);
-    }
-
-    function activeMembership(roomId, uid) {
-      return signedIn()
-        && exists(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid))
-        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid)).data.uid == uid
-        && get(/databases/$(database)/documents/rooms/$(roomId)/members/$(uid)).data.membershipState == 'active';
-    }
-
-    function joinedMemberValid(data, uid) {
-      return data.keys().hasAll(['uid', 'role', 'membershipState', 'joinedAt', 'inviteId'])
-        && data.keys().hasOnly(['uid', 'role', 'membershipState', 'joinedAt', 'inviteId'])
-        && data.uid == uid && data.role == 'member'
-        && data.membershipState == 'active'
-        && data.joinedAt is timestamp && data.joinedAt == request.time
-        && validInviteToken(data.inviteId);
-    }
-
-    function inviteShapeValid(data) {
-      return data.keys().hasAll(['roomId', 'createdByUid', 'createdAt', 'expiresAt',
-                                 'state', 'acceptedByUid', 'acceptedAt'])
-        && data.keys().hasOnly(['roomId', 'createdByUid', 'createdAt', 'expiresAt',
-                                 'state', 'acceptedByUid', 'acceptedAt'])
-        && data.roomId is string && data.roomId.size() > 0 && data.roomId.size() <= 120
-        && data.createdByUid is string && data.createdByUid.size() > 0
-        && data.createdAt is timestamp && data.expiresAt is timestamp
-        && data.state in ['pending', 'accepted', 'revoked']
-        && (data.acceptedByUid == null || data.acceptedByUid is string)
-        && (data.acceptedAt == null || data.acceptedAt is timestamp);
-    }
-
-    function validInviteAcceptance(inviteId) {
-      return request.resource.data.state == 'accepted'
-        && request.resource.data.acceptedByUid == request.auth.uid
-        && request.resource.data.acceptedAt == request.time
-        && exists(/databases/$(database)/documents/rooms/$(resource.data.roomId))
-        && get(/databases/$(database)/documents/rooms/$(resource.data.roomId)).data.ownerUid != request.auth.uid
-        && !exists(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid))
-        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.uid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.role == 'member'
-        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.membershipState == 'active'
-        && getAfter(/databases/$(database)/documents/rooms/$(resource.data.roomId)/members/$(request.auth.uid)).data.inviteId == inviteId;
-    }
-
-    function validJoinFromInvite(roomId, uid, inviteId) {
-      return exists(/databases/$(database)/documents/roomInvites/$(inviteId))
-        && get(/databases/$(database)/documents/roomInvites/$(inviteId)).data.state == 'pending'
-        && get(/databases/$(database)/documents/roomInvites/$(inviteId)).data.expiresAt > request.time
-        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.state == 'accepted'
-        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.acceptedByUid == uid
-        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.acceptedAt == request.time
-        && getAfter(/databases/$(database)/documents/roomInvites/$(inviteId)).data.roomId == roomId;
-    }
-
-    function roomFieldsValid(data) {
-      return data.keys().hasAll(['ownerUid', 'name', 'assignmentPolicy', 'defaultVisibility', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['ownerUid', 'name', 'assignmentPolicy', 'defaultVisibility', 'createdAt', 'updatedAt'])
-        && data.ownerUid is string && data.ownerUid.size() > 0
-        && data.name is string && data.name.size() >= 2 && data.name.size() <= 180
-        && data.assignmentPolicy in ['AUTO_ASSIGN', 'REQUIRE_ACCEPTANCE']
-        && data.defaultVisibility in ['ROOM', 'BUSY_ONLY', 'PRIVATE']
-        && data.createdAt is timestamp && data.updatedAt is timestamp;
-    }
-
-    function ownerMembershipValid(data, uid) {
-      return data.keys().hasAll(['uid', 'role', 'membershipState', 'joinedAt'])
-        && data.keys().hasOnly(['uid', 'role', 'membershipState', 'joinedAt'])
-        && data.uid == uid && data.role == 'owner'
-        && data.membershipState == 'active'
-        && data.joinedAt is timestamp && data.joinedAt == request.time;
-    }
-
-    match /rooms/{roomId} {
-      // Query constraint is mandatory: where('ownerUid','==',auth.uid).limit(20).
-      // Rules are not filters; no access is granted to rooms owned by other UIDs.
-      allow get: if isRoomOwner(resource.data.ownerUid);
-      allow list: if isRoomOwner(resource.data.ownerUid)
-        && request.query.limit != null && request.query.limit <= 20;
-      allow create: if signedIn()
-        && roomFieldsValid(request.resource.data)
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time
-        && ownerMembershipValid(
-          getAfter(/databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid)).data,
-          request.auth.uid);
-      allow update: if isRoomOwner(resource.data.ownerUid)
-        && roomFieldsValid(request.resource.data)
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['name', 'assignmentPolicy', 'defaultVisibility', 'updatedAt']);
-      allow delete: if false;
-
-      match /members/{memberUid} {
-        // The only membership creation permitted in this phase is the immutable
-        // initial owner, atomically alongside a brand-new parent room.
-        allow get: if signedIn() && memberUid == request.auth.uid
-          && exists(/databases/$(database)/documents/rooms/$(roomId))
-          && get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == request.auth.uid;
-        allow list: if false;
-        allow create: if signedIn()
-          && memberUid == request.auth.uid
-          && !exists(/databases/$(database)/documents/rooms/$(roomId))
-          && ownerMembershipValid(request.resource.data, memberUid)
-          && getAfter(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == memberUid;
-        allow update, delete: if false;
-      }
-      match /{nested=**} {
-        allow read, write: if false;
-      }
-    }
-
-    // All personal events, invites, projections and unapproved collections remain closed.
     match /{document=**} {
       allow read, write: if false;
     }
