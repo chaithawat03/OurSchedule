@@ -1,5 +1,5 @@
 import {
-  doc, getFirestore, serverTimestamp, Timestamp, type Firestore, type Transaction,
+  doc, serverTimestamp, Timestamp, type Firestore, type Transaction,
 } from 'firebase/firestore';
 
 export type QuotaKind = 'rooms' | 'invites';

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { includeQuota } from './quotaHelpers.mjs';
 import { after, before, describe, it } from 'node:test';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
@@ -38,6 +39,7 @@ const inviteRecord = (uid, roomId, extra = {}) => ({
 async function makeRoom(ownerUid, roomId) {
   const db = context(ownerUid);
   const batch = writeBatch(db);
+  await includeQuota(batch, db, ownerUid, 'rooms', roomId);
   batch.set(doc(db, 'rooms', roomId), {
     ownerUid, name: 'Room example',
     assignmentPolicy: 'REQUIRE_ACCEPTANCE',
@@ -53,7 +55,10 @@ async function makeRoom(ownerUid, roomId) {
 }
 async function makeInvite(ownerUid, roomId, token) {
   const db = context(ownerUid);
-  await assertSucceeds(setDoc(doc(db, 'roomInvites', token), inviteRecord(ownerUid, roomId)));
+  const batch = writeBatch(db);
+  await includeQuota(batch, db, ownerUid, 'invites', token);
+  batch.set(doc(db, 'roomInvites', token), inviteRecord(ownerUid, roomId));
+  await assertSucceeds(batch.commit());
   return db;
 }
 async function claimInvite(uid, token, roomId, overrides = {}) {
@@ -72,6 +77,39 @@ async function claimInvite(uid, token, roomId, overrides = {}) {
 }
 
 describe('M2.2a single-use invitation and Member invariants', () => {
+
+  it('cannot issue an invite without quota or re-use one quota transition for multiple invites', async () => {
+    const uid = 'invite-quota-issuer';
+    const roomId = 'room-invite-quota';
+    await makeRoom(uid, roomId);
+    const db = context(uid);
+    await assertFails(setDoc(doc(db, 'roomInvites', 'p'.repeat(43)), inviteRecord(uid, roomId)));
+    const batch = writeBatch(db);
+    await includeQuota(batch, db, uid, 'invites', 'q'.repeat(43));
+    for (const token of ['q'.repeat(43), 'r'.repeat(43)]) {
+      batch.set(doc(db, 'roomInvites', token), inviteRecord(uid, roomId));
+    }
+    await assertFails(batch.commit());
+  });
+
+  it('caps invitations at ten per 24h and denies direct quota manipulation', async () => {
+    const uid = 'invite-daily-cap';
+    const roomId = 'room-invite-daily-cap';
+    await makeRoom(uid, roomId);
+    for (let i = 0; i < 10; i++) {
+      await makeInvite(uid, roomId, String.fromCharCode(97 + i).repeat(43));
+    }
+    const db = context(uid);
+    const batch = writeBatch(db);
+    const token = 'k'.repeat(43);
+    await includeQuota(batch, db, uid, 'invites', token);
+    batch.set(doc(db, 'roomInvites', token), inviteRecord(uid, roomId));
+    await assertFails(batch.commit());
+    await assertFails(updateDoc(doc(db, 'users', uid, 'quotas', 'invites'), {
+      count: 1, windowStart: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+  });
+
   it('allows owner to issue a valid invite; requires authentication for a direct get and forbids listing', async () => {
     const roomId = 'invite-room-one';
     await makeRoom('issuer-one', roomId);
