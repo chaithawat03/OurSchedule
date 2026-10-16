@@ -87,7 +87,9 @@ service cloud.firestore {
       match /members/{memberUid} {
         // The only membership creation permitted in this phase is the immutable
         // initial owner, atomically alongside a brand-new parent room.
-        allow get: if signedIn() && memberUid == request.auth.uid;
+        allow get: if signedIn() && memberUid == request.auth.uid
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == request.auth.uid;
         allow list: if false;
         allow create: if signedIn()
           && memberUid == request.auth.uid
