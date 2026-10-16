@@ -5,7 +5,7 @@ import {
   assertFails, assertSucceeds, initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp,
+  collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, limit, query, serverTimestamp,
   setDoc, Timestamp, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 
@@ -77,6 +77,50 @@ async function claimInvite(uid, token, roomId, overrides = {}) {
 }
 
 describe('M2.2a single-use invitation and Member invariants', () => {
+
+  it('discovers only caller membership across rooms after refresh and rejects global/foreign queries', async () => {
+    const room1 = 'discover-room-1';
+    const room2 = 'discover-room-2';
+    await makeRoom('owner-discover', room1);
+    await makeRoom('owner-discover', room2);
+    await makeInvite('owner-discover', room1, 'x'.repeat(43));
+    await makeInvite('owner-discover', room2, 'y'.repeat(43));
+    await assertSucceeds(claimInvite('discover-member', 'x'.repeat(43), room1));
+    await assertSucceeds(claimInvite('discover-member', 'y'.repeat(43), room2));
+
+    // Simulates a fresh client reading Firestore, not a cached joinedRoomId.
+    const member = context('discover-member');
+    const own = query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), limit(20));
+    const membershipSnapshots = await assertSucceeds(getDocs(own));
+    if (membershipSnapshots.size !== 2) throw new Error('Expected 2 discovered member rooms');
+    for (const item of membershipSnapshots.docs) {
+      if (item.data().role !== 'member') throw new Error('Expected member role');
+      const parent = item.ref.parent.parent;
+      if (!parent || parent.parent.id !== 'rooms') throw new Error('Unexpected collection-group ancestor');
+      const room = await assertSucceeds(getDoc(parent));
+      if (!room.exists()) throw new Error('Missing parent room');
+    }
+    await assertFails(getDocs(collectionGroup(member, 'members')));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), limit(20))));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'owner-discover'), limit(20))));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), limit(21))));
+  });
+
+  it('immediately removes revoked membership from collection-group discovery', async () => {
+    await makeRoom('owner-query-revoke', 'room-query-revoke');
+    await makeInvite('owner-query-revoke', 'room-query-revoke', 'z'.repeat(43));
+    await assertSucceeds(claimInvite('query-revoked', 'z'.repeat(43), 'room-query-revoke'));
+    const user = context('query-revoked');
+    const ownQuery = query(collectionGroup(user, 'members'), where('uid', '==', 'query-revoked'), limit(20));
+    const before = await assertSucceeds(getDocs(ownQuery));
+    if (before.size !== 1) throw new Error('Expected active membership');
+    const owner = context('owner-query-revoke');
+    await assertSucceeds(deleteDoc(doc(owner, 'rooms', 'room-query-revoke', 'members', 'query-revoked')));
+    const after = await assertSucceeds(getDocs(ownQuery));
+    if (after.size !== 0) throw new Error('Revoked member remained discoverable');
+    await assertFails(getDoc(doc(user, 'rooms', 'room-query-revoke')));
+  });
+
 
   it('allows Owner to remove Member and immediately revokes their room access', async () => {
     await makeRoom('issuer-removal', 'room-member-removal');
