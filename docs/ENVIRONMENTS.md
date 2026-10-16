@@ -1,34 +1,28 @@
-# Environments and Firebase Setup Runbook
+# Firebase Environments — current state (2026-10-16)
 
-## Planned environments
+| Environment | Project | Notes |
+| --- | --- | --- |
+| Local / CI | `demo-ourschedule-ci` | Firebase Auth/Firestore emulators; no real project or credentials |
+| STAGING | `ourschedule` | Existing Google Cloud/Firebase Blaze project, Hosting at https://ourschedule.web.app; Web App registered; Firestore STANDARD Native `(default)` at `asia-southeast1` |
+| PRODUCTION | separate project, proposed `ourschedule-prod` | Not provisioned or deployed; ID availability not established |
 
-- Local: Firebase Emulator Suite (Firestore 8080, Auth 9099) and Vite.
-- CI: emulated project demo-ourschedule-ci. Never use real Firebase credentials.
-- Staging: a new separate Firebase project, proposed ID ourschedule-stg (availability not checked).
-- Production: a new separate Firebase project, proposed ID ourschedule-prod (availability not checked).
+The staging project `ourschedule` is **not Production**. This replaces obsolete suggestions to create `ourschedule-stg`.
 
-Project creation and registration have NOT been performed. These are proposed IDs, not deployable targets.
+## Current staging evidence
 
-## Before staging deployment
+- M0 Hosting was deployed and tested from approved commit `803ac7ff33bfc08f01889b61886b20be634526a8`, with HTTP 200 on root, PWA Manifest and Service Worker.
+- Initial Firestore rules were deployed as DENY ALL in staging. They MUST be updated as an explicit reviewed M1 release gate before enabling live M1 profile writes.
+- Firebase Google Auth provider is not yet verified enabled. Enable it manually only for staging following `docs/M1_IDENTITY_STAGING.md`.
+- Staging is on Blaze with billing enabled; free tier quotas still apply. Budget notifications are not a spending hard limit.
 
-1. Log in with an authorized Firebase account on a trusted execution environment.
-2. Create/configure staging Firebase project on Spark (no billing).
-3. Register Web App and enable Hosting, Firestore as appropriate, and later Auth.
-4. Record project ID, app configuration and security settings via approved configuration mechanism.
-5. Keep real credentials out of repository; use least-privileged deploy identity with short-lived identity when feasible.
-6. Verify Firebase Security Rules in Emulator first. Default-deny Rules may be deployed safely but no functional data flows will work.
-7. Run Hosting deploy to staging only with an explicit --project selection.
-8. Capture URL, project ID, commit, smoke result.
-9. Do not create or deploy production until release acceptance.
+## Deployment guardrails
 
-## Cost guardrails
+- PR CI may only use `demo-ourschedule-ci`; **no production credentials in PR**.
+- Build only at approved merged commit with verified `.env.local` mapping to staging Web App. Never commit tokens, passwords or service-account keys. Web App configuration values are public but environment-sensitive.
+- Always include `--project ourschedule` for staging operations. Do not infer target from `.firebaserc`.
+- Explicitly review and deploy Firestore rules before M1 UI Hosting; deploy `--only hosting` separately.
+- Keep staging and production Auth and Firestore entirely isolated.
 
-Stay on Spark. Static Firebase Hosting and Firestore have no-cost quotas, not unlimited resources. Firebase App Hosting, paid function usage, scheduled server features, Phone SMS auth and managed backups may require Blaze/billing. Any upgrade needs explicit budget approval.
+## Production release gates
 
-## Emergency response
-
-In case of accidental public Firestore rules, revert to default deny, rotate exposed secrets when relevant and review access. Hosting rollback must reference a previously validated release. Recovering Firestore content needs an explicitly tested procedure: Hosting rollback alone does not restore database state.
-
-## Acceptance gate
-
-Stage verified only when project exists and is confirmed distinct from production, deployment completed and smoke evidence recorded. Until then status is IMPLEMENTED_NOT_VERIFIED.
+Separate project provisioning, backup/deletion-protection plan, critical/high dependency security decisions, manual mobile and live rules verification, rollback steps, documented release SHA and separate explicit authorization. Hosting rollback does not roll back Firestore documents or Rules.

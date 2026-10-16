@@ -2,7 +2,7 @@
 
 Mobile-first shared personal calendar and room scheduling, designed for Google Cloud Firebase Spark.
 
-**Status:** Milestone 0 foundation (work in progress). No authentication or production service is enabled by this repository.
+**Status:** M0 foundation deployed to staging; M1 Google Identity is being implemented on a review branch. Production services are not deployed.
 
 ## Goal
 
@@ -27,8 +27,8 @@ Production changes must use a reviewed, merged commit SHA. Never include service
 
 ## Local development
 
-The app scaffold and verification commands are delivered as part of M0. Live Firebase projects are **not** created by source control. Never connect local tests to production.
+M0 UI deploys to staging. M1 introduces optional Google Auth when configured with an ignored `.env.local` and approved Firestore profile rules. See [M1 staging runbook](docs/M1_IDENTITY_STAGING.md). Local CI tests use demo emulators only; never connect tests to production.
 
 ## Release status
 
-M0 is **not verified** until CI, emulator and staging evidence are recorded. M1 starts only after the M0 gate is accepted.
+M0 staging hosting and responsive screenshots are recorded; live PWA install and Firestore security checks remain part of release acceptance. M1 is not verified until its PR, emulator tests and live staging checks pass.

@@ -23,7 +23,11 @@ jobs:
           java-version: '21'
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
-      - name: Production dependency audit (high+ gate)
+      - name: Verify patched gRPC dependency tree
+        run: node scripts/check-grpc-lock.mjs
+      - name: Production dependency audit (high+ gate, collect evidence)
+        id: audit_prod
+        continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
       - name: Full dependency audit (known upstream findings — visible advisory)
         id: audit_full
@@ -32,9 +36,9 @@ jobs:
       - name: Record full-audit residual risk
         if: steps.audit_full.outcome == 'failure'
         run: |
-          echo "::warning::Full dependency audit still reports HIGH findings in Firebase/CLI transitive development tools. PR #6 is DRAFT and must not be merged until risks are mitigated or expressly reviewed."
+          echo "::warning::Full dependency audit reports unresolved HIGH findings. Review issue #5 and the current PR before merge."
           echo "### Security audit — follow-up required" >> "$GITHUB_STEP_SUMMARY"
-          echo "Production dependency High+ gate passed; full development dependency audit remains unresolved. See Issue #5. This CI result is NOT a security sign-off." >> "$GITHUB_STEP_SUMMARY"
+          echo "Full dependency audit remains unresolved. See Issue #5. A green job with audit continue-on-error is NOT a security sign-off." >> "$GITHUB_STEP_SUMMARY"
       - name: Show resolved dependency versions
         run: npm ls firebase @firebase/rules-unit-testing firebase-tools vitest @grpc/grpc-js --all || true
       - name: Lint
@@ -47,3 +51,8 @@ jobs:
         run: npm run test:rules
       - name: Production build
         run: npm run build
+      - name: Enforce production dependency audit after regression tests
+        if: ${{ always() && steps.audit_prod.outcome == 'failure' }}
+        run: |
+          echo "::error::Production dependency audit has unresolved High+ findings. PR is blocked; see Issue #5."
+          exit 1
