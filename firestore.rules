@@ -198,11 +198,15 @@ service cloud.firestore {
       match /members/{memberUid} {
         // The only membership creation permitted in this phase is the immutable
         // initial owner, atomically alongside a brand-new parent room.
-        allow get: if signedIn() && memberUid == request.auth.uid
+        // Owner may inspect a bounded roster. Member may get own doc only.
+        allow get: if signedIn()
           && exists(/databases/$(database)/documents/rooms/$(roomId))
           && (get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == request.auth.uid
-              || resource.data.membershipState == 'active');
-        allow list: if false;
+              || (memberUid == request.auth.uid && resource.data.membershipState == 'active'));
+        allow list: if signedIn()
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == request.auth.uid
+          && request.query.limit != null && request.query.limit <= 20;
         allow create: if signedIn()
           && memberUid == request.auth.uid
           && (
@@ -214,7 +218,13 @@ service cloud.firestore {
              && joinedMemberValid(request.resource.data, memberUid)
              && validJoinFromInvite(roomId, memberUid, request.resource.data.inviteId))
           );
-        allow update, delete: if false;
+        allow update: if false;
+        // No owner deletion or role escalation. Any Member can leave,
+        // or the Room Owner may revoke that member's access.
+        allow delete: if signedIn() && resource.data.role == 'member'
+          && exists(/databases/$(database)/documents/rooms/$(roomId))
+          && (memberUid == request.auth.uid
+              || get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid == request.auth.uid);
       }
       match /{nested=**} {
         allow read, write: if false;
