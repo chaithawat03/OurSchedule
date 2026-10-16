@@ -41,3 +41,16 @@ Use **Test Account A** and **Test Account B** in separate clean browser profiles
 | App Check + spending monitoring or approved equivalent abuse plan | **PENDING** |
 | Public share approval | **BLOCKED** |
 | Production deployment | **NOT AUTHORIZED** |
+
+
+## App Check staged enablement procedure (no enforcement by default)
+
+Code supports an optional Vite environment variable \`VITE_RECAPTCHA_V3_SITE_KEY\`, which registers Firebase App Check (reCAPTCHA v3) **before Auth/Firestore client initialization** if provided. If unset, app behavior stays unchanged. The reCAPTCHA **site key** is public. Never put the **secret key** into source, Vite build or a GitHub issue.
+
+1. Configure reCAPTCHA v3 on the Staging hostname \`ourschedule.web.app\`. Register the Web App in Firebase Console > App Check. Review current quotas and provider costs; do not create any paid service without explicit budget review.
+2. Put the issued *site key* in the ignored Cloud Shell \`.env.local\`. Run staging build and verify Google Auth and Firestore reads on both desktop and mobile.
+3. Deploy only a reviewed merged SHA to STAGING. Inspect Firebase App Check request metrics first (verified/unverified ratios, errors), and keep Enforcement **OFF** while validating traffic.
+4. Only after real-client validation and a rollback plan, enable Firestore App Check Enforcement via Console. Verify sign-in, profile transactions, room and invitation writes and a rejected unsigned direct API request. Be ready to disable Enforcement immediately if legitimate requests are blocked.
+5. App Check does not replace User Auth, Firestore Rules, per-UID quotas or global/budget monitoring. It does not prevent all device farms or multi-account abuse.
+
+Official Firebase guidance: https://firebase.google.com/docs/app-check/web/recaptcha-provider
