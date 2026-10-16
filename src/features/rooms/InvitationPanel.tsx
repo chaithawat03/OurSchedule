@@ -22,7 +22,7 @@ function decodeInput(text: string): string {
   return parseInviteToken(value);
 }
 
-export default function InvitationPanel({ user, rooms }: { user: User; rooms: OwnedRoom[] }) {
+export default function InvitationPanel({ user, rooms, onJoined }: { user: User; rooms: OwnedRoom[]; onJoined: () => void }) {
   const [roomId, setRoomId] = useState('');
   const [issued, setIssued] = useState('');
   const [input, setInput] = useState(() => inviteFromHash(window.location.hash) ?? '');
@@ -70,6 +70,7 @@ export default function InvitationPanel({ user, rooms }: { user: User; rooms: Ow
       const snapshot = await getDoc(doc(firebaseClient.db, 'rooms', joinedId));
       setJoinedRoom(snapshot.exists() ? String(snapshot.data().name) : 'ห้องใหม่');
       setJoinedRoomId(joinedId);
+      onJoined();
       setInput('');
       if (inviteFromHash(window.location.hash) === token) {
         history.replaceState(null, '', window.location.pathname + window.location.search);

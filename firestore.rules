@@ -231,6 +231,17 @@ service cloud.firestore {
       }
     }
 
+    // Collection group query for the authenticated UID's memberships.
+    // Must be filtered by uid == auth.uid and limited to 20. This read
+    // exposes only the caller's own membership, not other members.
+    // The write rules in /rooms/{roomId}/members remain unchanged.
+    match /{path=**}/members/{memberId} {
+      allow list: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && resource.data.membershipState == 'active'
+        && request.query.limit != null && request.query.limit <= 20;
+    }
+
     // Possession of a 256-bit bearer token grants only a narrow invitation lookup.
     // Membership must be created in the SAME atomic batch as invite redemption.
     match /roomInvites/{inviteId} {

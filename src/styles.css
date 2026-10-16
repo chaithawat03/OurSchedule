@@ -7,3 +7,8 @@
 .invite-section{border-top:1px solid #e3ebf0;margin-top:18px;padding-top:16px;display:grid;gap:12px}.invite-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.invite-form select,.invite-form input{min-width:0;flex:1;border:1px solid #d4e2ea;border-radius:8px;padding:10px 12px;font:inherit;font-size:12px;min-height:42px}.invite-section p.invite-warning{color:#9b632b}.invite-link{width:100%;font-size:12px;overflow-wrap:anywhere;user-select:all;line-height:1.5;padding:8px;background:#f2f7fc;border-radius:7px;border:1px solid #d6e6ef}.invite-status{font-size:12px;color:#23586f}.invite-form button{min-height:42px}.invite-section .invite-danger{background:#8b4647}@media(max-width:470px){.invite-form{flex-direction:column;align-items:stretch}.invite-form select,.invite-form input,.invite-form button{width:100%}}
 
 .room-member-manager{border-top:1px solid #e3ebf1;margin-top:18px;padding-top:16px;display:grid;gap:10px}.room-member-manager h2{margin:0}.room-member-manager select{min-height:42px;background:white;color:#20364a;border:1px solid #d4e2ea;border-radius:8px;padding:10px}.room-members{margin:0;padding:0;list-style:none;display:grid;gap:8px}.room-members li{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f5f9fc;border-radius:8px;padding:9px}.room-members span{overflow-wrap:anywhere;font-size:12px}
+
+.joined-rooms{border-top:1px solid #e3ebf1;margin-top:18px;padding-top:16px}
+.joined-rooms h2{font-size:16px;margin:0 0 8px}
+.joined-rooms p{font-size:12px;color:#637f91;line-height:1.6}
+.joined-rooms button{margin-top:8px}

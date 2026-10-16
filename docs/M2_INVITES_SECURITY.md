@@ -34,3 +34,9 @@ These limits block straightforward per-UID high-rate creation **even from a modi
 
 ## Member revocation and leave
 Owners may list at most 20 Member documents of their own rooms and may delete only role=member records. A Member may delete only their own record; owner can never delete own membership, and member roles remain immutable. Once the Member document is deleted, room metadata access is denied. The UI includes Owner removal and Member self-leave for the current joining session, but joined-room discovery across sessions is still a blocker for complete M2.
+
+
+## Joined-room discovery after browser reload (collection group)
+An authenticated user now lists their own active \`rooms/{roomId}/members/{uid}\` documents through a bounded Firestore \`collectionGroup('members')\` query restricted by \`where('uid','==',auth.uid)\` and \`limit(20)\`. The wildcard group rule permits **list** only if \`resource.data.uid == request.auth.uid\` and active membership; direct member-document \`get\` still follows the room-specific rule. The client filters \`role='member'\` locally, reads each parent room with existing membership authorization, and shows joined rooms after a refresh/re-login. Revoked/left memberships are deleted so they disappear from subsequent queries and parent room reads fail.
+
+This requires the \`members.uid\` single-field index with **COLLECTION_GROUP** scope included in \`firestore.indexes.json\`; the Firebase emulator does not prove index readiness on live STAGING. When a future reviewed merge is staged, deploy **firestore indexes** alongside approved Rules, wait for the index to reach READY, then deploy Hosting. Monitor read costs (bounded to 20 membership docs plus room metadata lookups). Rules are not filters, so never run an unrestricted collection-group query.

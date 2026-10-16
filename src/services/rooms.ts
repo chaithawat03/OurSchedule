@@ -1,6 +1,6 @@
 import type { User } from 'firebase/auth';
 import {
-  collection, doc, getDocs, limit, query, runTransaction, serverTimestamp, where,
+  collection, collectionGroup, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, where,
 } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
 import { validateRoomName } from '../lib/roomName';
@@ -54,4 +54,30 @@ export async function listOwnedRooms(user: User): Promise<OwnedRoom[]> {
     assignmentPolicy: snapshot.data().assignmentPolicy as OwnedRoom['assignmentPolicy'],
     defaultVisibility: snapshot.data().defaultVisibility as OwnedRoom['defaultVisibility'],
   })).sort((a, b) => a.name.localeCompare(b.name, 'th'));
+}
+
+
+export interface JoinedRoom {
+  id: string;
+  name: string;
+}
+
+export async function listJoinedRooms(user: User): Promise<JoinedRoom[]> {
+  const db = dbForUser(user);
+  // Firestore Rules authorize only the UID's own active membership docs.
+  // The collection-group single-field index is declared in firestore.indexes.json.
+  const memberships = await getDocs(query(
+    collectionGroup(db, 'members'),
+    where('uid', '==', user.uid),
+    limit(20),
+  ));
+  const joined = memberships.docs.filter((item) => item.data().role === 'member');
+  const rooms = await Promise.all(joined.map(async (membership) => {
+    const roomRef = membership.ref.parent.parent;
+    if (!roomRef || roomRef.parent.id !== 'rooms') return null;
+    const result = await getDoc(roomRef);
+    return result.exists() ? { id: result.id, name: String(result.data().name) } : null;
+  }));
+  return rooms.filter((room): room is JoinedRoom => room !== null)
+    .sort((a, b) => a.name.localeCompare(b.name, 'th'));
 }
