@@ -16,7 +16,7 @@ Address audit findings identified against foundation commit `e9e46be8016c1ab379d
 - `@firebase/rules-unit-testing`: upgrade to major 6, matching Firebase 13 peer dependency.
 - `firebase-tools`: upgrade to major 15, applying later CLI fixes.
 - `vitest`: upgrade to major 5, applying later test-tool fixes.
-- Node.js engine: 22.12+ on Node.js 22 LTS line; CI runs Node 22 and Java 21.
+- Node.js engine: **24.12+ on Node.js 24 LTS line**. Firebase SDK 13 / Rules Unit Testing 6 require Node.js >=24.12; Node 22 previously passed some tests but emitted EBADENGINE warnings and is not accepted. CI runs Node 24 and Java 21. Developers using Cloud Shell must switch to Node 24 before reinstalling and testing.
 - CI uses a checked-in lockfile with `npm ci`. The **production** High/Critical audit is a hard CI gate. The **full development** audit runs as a visibly failing advisory step while regression tests continue; this does NOT waive the findings or imply security sign-off. PR remains DRAFT pending security review.
 
 ## Initial CI result (2026-10-16)
@@ -35,6 +35,7 @@ Do not merge until residual High findings are resolved or a documented, authoriz
 ## Verification commands
 
 ```bash
+node --version   # must be >=24.12 and <25
 npm ci
 npm audit --omit=dev --audit-level=high
 npm audit --audit-level=high
