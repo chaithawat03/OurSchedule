@@ -69,6 +69,8 @@ export async function listJoinedRooms(user: User): Promise<JoinedRoom[]> {
   const memberships = await getDocs(query(
     collectionGroup(db, 'members'),
     where('uid', '==', user.uid),
+    where('role', '==', 'member'),
+    where('membershipState', '==', 'active'),
     limit(20),
   ));
   const joined = memberships.docs.filter((item) => item.data().role === 'member' && item.data().membershipState === 'active');

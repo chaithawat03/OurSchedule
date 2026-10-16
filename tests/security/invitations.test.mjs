@@ -83,6 +83,8 @@ describe('M2.2a single-use invitation and Member invariants', () => {
     const room2 = 'discover-room-2';
     await makeRoom('owner-discover', room1);
     await makeRoom('owner-discover', room2);
+    // Same UID also owns rooms: owner records must NOT crowd member results.
+    await makeRoom('discover-member', 'member-owned-room');
     await makeInvite('owner-discover', room1, 'x'.repeat(43));
     await makeInvite('owner-discover', room2, 'y'.repeat(43));
     await assertSucceeds(claimInvite('discover-member', 'x'.repeat(43), room1));
@@ -90,7 +92,7 @@ describe('M2.2a single-use invitation and Member invariants', () => {
 
     // Simulates a fresh client reading Firestore, not a cached joinedRoomId.
     const member = context('discover-member');
-    const own = query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), limit(20));
+    const own = query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), where('role', '==', 'member'), where('membershipState', '==', 'active'), limit(20));
     const membershipSnapshots = await assertSucceeds(getDocs(own));
     if (membershipSnapshots.size !== 2) throw new Error('Expected 2 discovered member rooms');
     for (const item of membershipSnapshots.docs) {
@@ -103,7 +105,9 @@ describe('M2.2a single-use invitation and Member invariants', () => {
     await assertFails(getDocs(collectionGroup(member, 'members')));
     await assertFails(getDocs(query(collectionGroup(member, 'members'), limit(20))));
     await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'owner-discover'), limit(20))));
-    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), limit(21))));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), limit(20))));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), where('role', '==', 'owner'), where('membershipState', '==', 'active'), limit(20))));
+    await assertFails(getDocs(query(collectionGroup(member, 'members'), where('uid', '==', 'discover-member'), where('role', '==', 'member'), where('membershipState', '==', 'active'), limit(21))));
   });
 
   it('immediately removes revoked membership from collection-group discovery', async () => {
@@ -111,7 +115,7 @@ describe('M2.2a single-use invitation and Member invariants', () => {
     await makeInvite('owner-query-revoke', 'room-query-revoke', 'z'.repeat(43));
     await assertSucceeds(claimInvite('query-revoked', 'z'.repeat(43), 'room-query-revoke'));
     const user = context('query-revoked');
-    const ownQuery = query(collectionGroup(user, 'members'), where('uid', '==', 'query-revoked'), limit(20));
+    const ownQuery = query(collectionGroup(user, 'members'), where('uid', '==', 'query-revoked'), where('role', '==', 'member'), where('membershipState', '==', 'active'), limit(20));
     const before = await assertSucceeds(getDocs(ownQuery));
     if (before.size !== 1) throw new Error('Expected active membership');
     const owner = context('owner-query-revoke');
