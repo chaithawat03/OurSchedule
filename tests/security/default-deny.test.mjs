@@ -13,7 +13,6 @@ before(async () => {
 after(async () => { if (environment) await environment.cleanup(); });
 
 const protectedDocuments = [
-  'users/alice',
   'users/alice/personalEvents/event-1',
   'rooms/room-1',
   'rooms/room-1/members/alice',
@@ -23,7 +22,7 @@ const protectedDocuments = [
   'roomInvites/invite-1',
 ];
 
-describe('M0 default deny', () => {
+describe('M1 default deny for all non-profile paths', () => {
   for (const path of protectedDocuments) {
     it('denies anonymous and forged privileged identity on ' + path, async () => {
       const anonymous = environment.unauthenticatedContext().firestore();

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import IdentityPanel from './features/identity/IdentityPanel';
 import { bangkokYearMonth, monthGrid, shiftMonth } from './lib/monthGrid';
 
 type View = 'day' | 'month' | 'multi';
@@ -40,7 +41,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand"><div className="mark">OS</div><div><strong>OurSchedule</strong><small>ปฏิทินของเรา</small></div></div>
-        <span className="phase">M0 FOUNDATION</span>
+        <span className="phase">M1 IDENTITY</span>
       </header>
       <div className="workspace">
         <aside className="sidebar">
@@ -48,13 +49,14 @@ export default function App() {
           <div className="nav-current">ปฏิทินส่วนตัว</div>
           <p className="section-name room-heading">ROOMS</p>
           <p className="aside-note">การสร้างห้องจะเปิดใช้งานใน Milestone 2</p>
-          <div className="aside-warning">M0 ปิดการอ่าน/เขียน Firestore ทั้งหมดโดยค่าเริ่มต้น</div>
+          <div className="aside-warning">M1: เปิดสิทธิ์เฉพาะโปรไฟล์ของตนเอง ส่วนกิจกรรมและห้องยังปิดอยู่</div>
         </aside>
         <main className="content">
           <div className="heading-row">
-            <div><p className="eyebrow">CALENDAR FOUNDATION</p><h1>ตารางกิจกรรม</h1><p className="subtitle">หน้าตัวอย่างสำหรับออกแบบ UI ยังไม่เชื่อมต่อบัญชีหรือข้อมูลจริง</p></div>
+            <div><p className="eyebrow">CALENDAR FOUNDATION</p><h1>ตารางกิจกรรม</h1><p className="subtitle">เข้าสู่ระบบด้วย Google เพื่อใช้งานบัญชีส่วนตัว ฟังก์ชันกิจกรรมจะพัฒนาใน M3</p></div>
             <span className="preview-pill">Preview only</span>
           </div>
+          <IdentityPanel />
           <div className="toolbar">
             <div className="nav-month">
               <button type="button" onClick={() => navigate(-1)} aria-label="เดือนก่อนหน้า">‹</button>
@@ -76,7 +78,7 @@ export default function App() {
               {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={setSelected} />}
             </div>
           )}
-          <p className="footnote">● No Firebase data access in M0 <span>·</span> {dateHeading}</p>
+          <p className="footnote">● M1: โปรไฟล์ส่วนตัวเท่านั้น ยังไม่เข้าถึงกิจกรรม <span>·</span> {dateHeading}</p>
         </main>
       </div>
     </div>
