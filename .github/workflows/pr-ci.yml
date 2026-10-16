@@ -43,6 +43,8 @@ jobs:
         run: npm ls firebase @firebase/rules-unit-testing firebase-tools vitest @grpc/grpc-js --all || true
       - name: Check staging isolation harness syntax (no live calls in CI)
         run: node --check scripts/staging-auth-isolation.mjs
+      - name: Check staging release script syntax (no deployment in CI)
+        run: bash -n scripts/release-m2-staging.sh
       - name: Lint
         run: npm run lint
       - name: Typecheck
