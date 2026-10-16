@@ -1,6 +1,6 @@
 # M2.2 live security & abuse acceptance — STAGING ONLY
 
-Status: **PENDING HUMAN LIVE VALIDATION / NOT FOR PUBLIC SHARING** (2026-10-16).
+Status: **M1 LIVE READ ISOLATION PASS; M2 LIVE ACCEPTANCE PENDING / NOT FOR PUBLIC SHARING** (2026-10-16).
 
 Repository `main` is still at M2.1, and Firebase Staging Hosting/Rules remain M1 until approved deployment. This runbook is for a later, explicit rollout of reviewed/merged M2.2 SHA; **do not deploy this Draft PR directly**. Production is an entirely separate Firebase project, unprovisioned.
 
@@ -36,7 +36,8 @@ For end-to-end Google provider acceptance, use **Test Account A** and **Test Acc
 | --- | --- |
 | Per-UID quota + atomic invite + replay/last-Owner/security regression | CI: PASS |
 | Member removal/self-leave and revocation | Emulator: PASS |
-| M1 live Firestore foreign-UID denial | **PENDING** |
+| M1 live Firestore foreign-UID **READ** denial | **PASS** — user-reported staging REST 2026-10-16: 6/6; Anonymous B deleted |
+| M1 live foreign-UID **WRITE** denial | **PENDING** — emulator tested; no live write attempts |
 | A/B live invite and revocation security | **PENDING** |
 | App Check + spending monitoring or approved equivalent abuse plan | **PENDING** |
 | Public share approval | **BLOCKED** |
@@ -85,3 +86,9 @@ Do **not** paste the Google user's UID, Web API key, private tokens or personal 
 **Immediately disable Anonymous Provider after completion**, even if the test fails, and verify no unwanted anonymous users were created during the enablement window. Live cross-UID **write** denial still relies on Emulator tests until a separate, explicit non-destructive live write test is designed. This temporary-identity test should not be mistaken for a complete M2 release sign-off.
 
 Official: https://firebase.google.com/docs/auth/web/anonymous-auth and https://firebase.google.com/docs/firestore/use-rest-api .
+
+## Executed live READ check evidence — 2026-10-16
+
+The staging operator reports all 6 checks of `scripts/staging-auth-isolation.mjs` passed with HTTP status results: temporary Anonymous B own missing profile **404**; B get Google A profile **403**; unsigned get A profile **403**; B users collection listing **403**; B read A private events **403**; B global rooms listing **403**. Script reports test Anonymous Firebase Auth user **deleted successfully**. These results are evidence of actual staging Firestore Rules enforcement for those read cases, not just Emulator execution. No private UIDs/API keys or ID tokens were retained in the issue or runbook.
+
+**Operator action remains:** Anonymous Sign-in Provider should be **disabled immediately** and verified in staging Authentication Console (this setting is not toggled by the script). Temporary B being deleted does **not** establish Anonymous Provider is off. M1 live **write** denial and M2 invite/join/revoke end-to-end acceptance are **not established** by this read-only test. Do not describe M2 as Staging Verified or deploy PR #10 solely because this subset passed.
