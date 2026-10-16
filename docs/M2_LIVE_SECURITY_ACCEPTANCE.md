@@ -101,4 +101,23 @@ Owner provided a Firebase Authentication > Sign-in method screenshot from Stagin
 
 ## M2.2 joined-room discovery review
 
-Draft PR #10 adds a `members` collection-group query constrained by `where('uid','==', auth.uid)` and `limit(20)`, plus a Rules `allow list` check binding `resource.data.uid` to the requesting UID. Emulator positive + adversarial tests verify matching memberships are returned, global/foreign/unbounded queries denied, and revoked memberships disappear. The group-scope single-field `members.uid` index is declared in `firestore.indexes.json`. **Before a future approved Staging release** deploy `firestore:indexes`, wait until the index reports READY, and only then deploy the reviewed Rules and Hosting and smoke test real re-login / member leave. Do not deploy PR Draft index/rules to the live project merely because Emulator tests are green.
+Draft PR #10 adds a `members` collection-group query constrained by `where('uid','==', auth.uid)` and `limit(20)`, plus a Rules `allow list` check binding `resource.data.uid` to the requesting UID. Emulator positive + adversarial tests verify matching memberships are returned, global/foreign/unbounded queries denied, and revoked memberships disappear. The group-scope composite `members(uid, role, membershipState)` index is declared in `firestore.indexes.json`. **Before a future approved Staging release** deploy `firestore:indexes`, wait until the index reports READY, and only then deploy the reviewed Rules and Hosting and smoke test real re-login / member leave. Do not deploy PR Draft index/rules to the live project merely because Emulator tests are green.
+
+
+## Staging release script (requires a merged main commit, authenticated Cloud Shell)
+
+This repository contains \`scripts/release-m2-staging.sh\` as a guarded, explicit staging-only release process. It will refuse to run if: working tree dirty, HEAD is not latest \`origin/main\`, Node is not 24.12+, or the ignored \`.env.local\` does not contain the existing Staging Firebase Web App \`ourschedule\` configuration. Operator must type **DEPLOY STAGING** explicitly.
+
+The script executes locked installation, production audit, lint/typecheck/unit/emulator security tests, and Vite build. It deploys **Firestore indexes first**, polls the required \`members(uid,role,membershipState)\` composite COLLECTION_GROUP index for **READY** through \`gcloud\`, then deploys reviewed Rules and finally Hosting. It checks the published JS asset hash and PWA static endpoints. A failed index readiness check stops **before** Rules/Hosting deployment. If Rules succeed but Hosting fails, this can produce a mixed rollout; do not claim success, investigate and roll back explicitly.
+
+Once PR #10 has been reviewed/merged and staging exposure approval given:
+
+\`\`\`bash
+cd ~/OurSchedule
+git status --short    # Must be clean; .env.local ignored
+git fetch origin main
+git checkout --detach <EXACT_MERGED_SHA>
+bash scripts/release-m2-staging.sh
+\`\`\`
+
+**No deployment can be performed by merely merging this PR**, and CI never receives staging credentials. A completed script and live verification on real devices remain necessary. All M2 Room/Invite writes become eligible for any Google-authenticated UID under the staged Rules, constrained by per-UID quotas but **not** by per-IP or global throttling; staging owner must approve this exposure and continue to monitor costs. This remains **not** a production authorization.
