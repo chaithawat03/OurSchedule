@@ -23,8 +23,10 @@ export function useIdentity() {
   useEffect(() => {
     if (!firebaseClient) return;
     let active = true;
+    let sessionGeneration = 0;
     const { auth, db } = firebaseClient;
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const generation = ++sessionGeneration;
       if (!active) return;
       if (!user) {
         setState({ status: 'signed-out', user: null });
@@ -32,14 +34,14 @@ export function useIdentity() {
       }
       setState({ status: 'loading', user: null });
       void ensureOwnProfile(user, db)
-        .then(() => { if (active) setState({ status: 'ready', user }); })
+        .then(() => { if (active && generation === sessionGeneration) setState({ status: 'ready', user }); })
         .catch((error: unknown) => {
-          if (active) setState({ status: 'error', user, message: identityErrorMessage(error) });
+          if (active && generation === sessionGeneration) setState({ status: 'error', user, message: identityErrorMessage(error) });
         });
     }, (error) => {
       if (active) setState({ status: 'error', user: null, message: identityErrorMessage(error) });
     });
-    return () => { active = false; unsubscribe(); };
+    return () => { active = false; sessionGeneration++; unsubscribe(); };
   }, []);
 
   const signIn = useCallback(async () => {

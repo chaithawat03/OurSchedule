@@ -32,9 +32,9 @@ jobs:
       - name: Record full-audit residual risk
         if: steps.audit_full.outcome == 'failure'
         run: |
-          echo "::warning::Full dependency audit still reports HIGH findings in Firebase/CLI transitive development tools. PR #6 is DRAFT and must not be merged until risks are mitigated or expressly reviewed."
+          echo "::warning::Full dependency audit reports unresolved HIGH findings. Review issue #5 and the current PR before merge."
           echo "### Security audit — follow-up required" >> "$GITHUB_STEP_SUMMARY"
-          echo "Production dependency High+ gate passed; full development dependency audit remains unresolved. See Issue #5. This CI result is NOT a security sign-off." >> "$GITHUB_STEP_SUMMARY"
+          echo "Full dependency audit remains unresolved. See Issue #5. A green job with audit continue-on-error is NOT a security sign-off." >> "$GITHUB_STEP_SUMMARY"
       - name: Show resolved dependency versions
         run: npm ls firebase @firebase/rules-unit-testing firebase-tools vitest @grpc/grpc-js --all || true
       - name: Lint
