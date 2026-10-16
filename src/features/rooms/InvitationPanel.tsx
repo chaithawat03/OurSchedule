@@ -4,7 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import type { OwnedRoom } from '../../services/rooms';
 import { firebaseClient } from '../../services/firebaseClient';
 import {
-  acceptRoomInvite, createRoomInvite, inspectRoomInvite, revokeRoomInvite,
+  acceptRoomInvite, createRoomInvite, inspectRoomInvite, revokeRoomInvite, leaveRoom,
 } from '../../services/invitations';
 import { inviteFromHash, inviteLink, parseInviteToken } from '../../lib/invites';
 
@@ -27,12 +27,14 @@ export default function InvitationPanel({ user, rooms }: { user: User; rooms: Ow
   const [issued, setIssued] = useState('');
   const [input, setInput] = useState(() => inviteFromHash(window.location.hash) ?? '');
   const [joinedRoom, setJoinedRoom] = useState('');
+  const [joinedRoomId, setJoinedRoomId] = useState('');
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     setIssued('');
     setJoinedRoom('');
+    setJoinedRoomId('');
     setMessage('');
   }, [user.uid]);
 
@@ -67,6 +69,7 @@ export default function InvitationPanel({ user, rooms }: { user: User; rooms: Ow
       if (!firebaseClient) throw new Error('Firebase ยังไม่พร้อม');
       const snapshot = await getDoc(doc(firebaseClient.db, 'rooms', joinedId));
       setJoinedRoom(snapshot.exists() ? String(snapshot.data().name) : 'ห้องใหม่');
+      setJoinedRoomId(joinedId);
       setInput('');
       if (inviteFromHash(window.location.hash) === token) {
         history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -91,6 +94,20 @@ export default function InvitationPanel({ user, rooms }: { user: User; rooms: Ow
     } finally {
       setWorking(false);
     }
+  };
+
+
+  const leaveJoinedRoom = async () => {
+    if (!joinedRoomId || working) return;
+    setWorking(true);
+    try {
+      await leaveRoom(user, joinedRoomId);
+      setJoinedRoom('');
+      setJoinedRoomId('');
+      setMessage('ออกจากห้องแล้ว');
+    } catch {
+      setMessage('ออกจากห้องไม่สำเร็จ');
+    } finally { setWorking(false); }
   };
 
   return (
@@ -118,7 +135,8 @@ export default function InvitationPanel({ user, rooms }: { user: User; rooms: Ow
           placeholder="วางลิงก์เชิญหรือรหัสคำเชิญ" disabled={working} required />
         <button type="submit" disabled={working || !input.trim()}>เข้าร่วมห้อง</button>
       </form>
-      {joinedRoom && <p className="invite-status">คุณเข้าร่วม: {joinedRoom} (จะเพิ่มรายการห้องที่เข้าร่วมถาวรในระยะถัดไป)</p>}
+      {joinedRoom && <div><p className="invite-status">คุณเข้าร่วม: {joinedRoom}</p>
+        <button type="button" onClick={() => void leaveJoinedRoom()} disabled={working}>ออกจากห้องนี้</button></div>}
       {message && <p role="status" className="invite-status">{message}</p>}
     </div>
   );

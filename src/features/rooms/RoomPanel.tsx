@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import { createOwnedRoom, listOwnedRooms, type OwnedRoom } from '../../services/rooms';
 import InvitationPanel from './InvitationPanel';
+import MemberManager from './MemberManager';
 
 export default function RoomPanel({ user }: { user: User | null }) {
   const [name, setName] = useState('');
@@ -63,9 +64,10 @@ export default function RoomPanel({ user }: { user: User | null }) {
           {loading ? <p role="status">กำลังโหลดห้อง...</p>
             : rooms.length === 0 ? <p>ยังไม่มีห้องที่คุณเป็นเจ้าของ</p>
               : <ul className="room-list">{rooms.map((room) =>
-                <li key={room.id}><strong>{room.name}</strong><small>Owner · สมาชิก 1 คน · ยังไม่เปิดการแชร์</small></li>,
+                <li key={room.id}><strong>{room.name}</strong><small>Owner · จัดการสมาชิกได้ด้านล่าง</small></li>,
               )}</ul>}
           <InvitationPanel user={user} rooms={rooms} />
+          <MemberManager user={user} rooms={rooms} />
         </>
       ) : <p>เข้าสู่ระบบด้วย Google เพื่อสร้างและดูห้องที่คุณเป็นเจ้าของ</p>}
     </section>

@@ -17,7 +17,7 @@ The token is a 43-character Base64URL identifier generated with browser Web Cryp
 ## Known risks / release blockers
 1. **Client-only Rules cannot impose robust per-user rate limits** on issuing invites, making rooms or repeated reads. Prior to Staging activation on a public site, decide whether an App Check, trusted server, explicit quota and monitoring are necessary. A link can be forwarded, so invite acceptor is not bound to email/phone.
 2. Member room list across sessions is not implemented: joining a room shows the newly joined room in the current app session, but this phase does not yet provide an indexed per-user membership projection.
-3. Room Owner cannot remove an accepted Member in this slice. This is **not yet a complete permission-management product**. Add revocation, leave, role changes and safe last-owner invariants in M2.2b.
+3. Room Owner can remove a Member and a Member can leave; **Owner** cannot be deleted. However Admin role changes, owner transfer, per-room member pagination and post-reload joined-room discovery are not yet implemented.
 4. Android/iOS sign-in and live cross-UID Firestore access tests are required. M1 live Cross-UID proof remains outstanding.
 5. Developers must re-check Firestore Security Rules evaluation limits (getAfter/get calls) and transaction concurrency under real conditions before deployment.
 6. Prior full npm audit residual development vulnerabilities remain tracked in #5.
@@ -30,3 +30,7 @@ The token is a 43-character Base64URL identifier generated with browser Web Cryp
 Rooms are capped at **3 per 24-hour rolling window per Firebase UID**, and invitation issuance at **10 per 24-hour rolling window per UID**. Persist fixed-counter documents `users/{uid}/quotas/{rooms|invites}` with count, windowStart, updatedAt and lastResourceId. A room/invite creation must atomically transition its matching counter using `getAfter`; lastResourceId ties the counter to exactly one new resource per batch, preventing a single increment paying for multiple writes. Counters have strict schema, immutable valid window semantics, are owner-readable only, non-listable, and cannot be deleted. SDK uses `runTransaction` so concurrent attempts retry rather than lose quota updates. Tests assert quota forgery, reuse, cap, expiration and account isolation.
 
 These limits block straightforward per-UID high-rate creation **even from a modified client**. They DO NOT provide IP/device/global limits, nor stop malicious people from creating many Auth accounts; App Check, budget alerting and/or a trusted server are separate release gates for public access. If a device clock is wrong, client creation may be denied by Rules (fail closed). Do not treat this as a complete abuse-control system.
+
+
+## Member revocation and leave
+Owners may list at most 20 Member documents of their own rooms and may delete only role=member records. A Member may delete only their own record; owner can never delete own membership, and member roles remain immutable. Once the Member document is deleted, room metadata access is denied. The UI includes Owner removal and Member self-leave for the current joining session, but joined-room discovery across sessions is still a blocker for complete M2.
