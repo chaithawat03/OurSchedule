@@ -78,6 +78,35 @@ async function claimInvite(uid, token, roomId, overrides = {}) {
 
 describe('M2.2a single-use invitation and Member invariants', () => {
 
+  it('allows Owner to remove Member and immediately revokes their room access', async () => {
+    await makeRoom('issuer-removal', 'room-member-removal');
+    await makeInvite('issuer-removal', 'room-member-removal', 'u'.repeat(43));
+    await assertSucceeds(claimInvite('guest-removal', 'u'.repeat(43), 'room-member-removal'));
+    const owner = context('issuer-removal');
+    const guest = context('guest-removal');
+    const members = await assertSucceeds(getDocs(query(collection(owner, 'rooms', 'room-member-removal', 'members'), limit(20))));
+    if (members.size !== 2) throw new Error('Expected two members');
+    await assertFails(getDocs(query(collection(guest, 'rooms', 'room-member-removal', 'members'), limit(20))));
+    await assertSucceeds(deleteDoc(doc(owner, 'rooms', 'room-member-removal', 'members', 'guest-removal')));
+    await assertFails(getDoc(doc(guest, 'rooms', 'room-member-removal')));
+    await assertFails(getDoc(doc(guest, 'rooms', 'room-member-removal', 'members', 'guest-removal')));
+    await assertFails(deleteDoc(doc(owner, 'rooms', 'room-member-removal', 'members', 'issuer-removal')));
+  });
+
+  it('allows Member self-leave and prevents deleting another Member or Owner', async () => {
+    await makeRoom('issuer-leave', 'room-voluntary-leave');
+    await makeInvite('issuer-leave', 'room-voluntary-leave', 'v'.repeat(43));
+    await assertSucceeds(claimInvite('guest-leave', 'v'.repeat(43), 'room-voluntary-leave'));
+    const guest = context('guest-leave');
+    await assertFails(deleteDoc(doc(guest, 'rooms', 'room-voluntary-leave', 'members', 'issuer-leave')));
+    await assertSucceeds(deleteDoc(doc(guest, 'rooms', 'room-voluntary-leave', 'members', 'guest-leave')));
+    await assertFails(getDoc(doc(guest, 'rooms', 'room-voluntary-leave')));
+    const owner = context('issuer-leave');
+    const kept = await assertSucceeds(getDoc(doc(owner, 'rooms', 'room-voluntary-leave', 'members', 'issuer-leave')));
+    if (!kept.exists()) throw new Error('Owner must remain');
+  });
+
+
   it('cannot issue an invite without quota or re-use one quota transition for multiple invites', async () => {
     const uid = 'invite-quota-issuer';
     const roomId = 'room-invite-quota';

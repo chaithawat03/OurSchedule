@@ -171,6 +171,8 @@ describe('M2.1 room owner-only authorization', () => {
     const outsider = ownerDb('new-person');
     await assertFails(setDoc(doc(outsider, 'rooms', 'room-undeletable', 'members', 'new-person'), ownerData('new-person')));
     await assertFails(getDocs(collection(owner, 'rooms', 'room-undeletable', 'members')));
+    await assertSucceeds(getDocs(query(collection(owner, 'rooms', 'room-undeletable', 'members'), limit(20))));
+    await assertFails(getDocs(query(collection(owner, 'rooms', 'room-undeletable', 'members'), limit(21))));
   });
 
   it('keeps all nested events, details, projections, and invitations denied', async () => {

@@ -1,5 +1,5 @@
 import type { User } from 'firebase/auth';
-import { Timestamp, doc, getDoc, runTransaction, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
 import { generateInviteToken, parseInviteToken } from '../lib/invites';
 import { consumeQuota } from './quota';
@@ -71,4 +71,26 @@ export async function acceptRoomInvite(user: User, rawToken: string): Promise<st
 export async function revokeRoomInvite(user: User, token: string): Promise<void> {
   const db = dbFor(user);
   await updateDoc(doc(db, 'roomInvites', parseInviteToken(token)), { state: 'revoked' });
+}
+
+export interface RoomMember {
+  uid: string;
+  role: 'owner' | 'member';
+}
+
+export async function listRoomMembers(owner: User, roomId: string): Promise<RoomMember[]> {
+  const db = dbFor(owner);
+  const result = await getDocs(query(collection(db, 'rooms', roomId, 'members'), limit(20)));
+  return result.docs.map((item) => ({ uid: item.id, role: item.data().role as RoomMember['role'] }));
+}
+
+export async function removeRoomMember(owner: User, roomId: string, memberUid: string): Promise<void> {
+  const db = dbFor(owner);
+  if (!memberUid || memberUid === owner.uid) throw new Error('ไม่สามารถลบเจ้าของห้องได้');
+  await deleteDoc(doc(db, 'rooms', roomId, 'members', memberUid));
+}
+
+export async function leaveRoom(member: User, roomId: string): Promise<void> {
+  const db = dbFor(member);
+  await deleteDoc(doc(db, 'rooms', roomId, 'members', member.uid));
 }
