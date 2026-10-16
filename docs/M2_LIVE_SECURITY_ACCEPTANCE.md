@@ -2,7 +2,7 @@
 
 Status: **M1 LIVE READ ISOLATION PASS; M2 LIVE ACCEPTANCE PENDING / NOT FOR PUBLIC SHARING** (2026-10-16).
 
-Repository `main` is still at M2.1, and Firebase Staging Hosting/Rules remain M1 until approved deployment. This runbook is for a later, explicit rollout of reviewed/merged M2.2 SHA; **do not deploy this Draft PR directly**. Production is an entirely separate Firebase project, unprovisioned.
+**Current stage:** M2 source `85433cd13f24f64ffd7e542b4382bb94689c03a0` was deployed to Firebase STAGING with the required composite index READY, Rules and Hosting released. The owner reported M2 owner-flow live smoke 7/7 PASS on Desktop, Android Chrome and iPhone Safari (Google login, persistent room, invite creation/revoke). These facts are STAGING acceptance only. Production is a separate unprovisioned project.
 
 ## Automated acceptance (GitHub PR CI)
 
@@ -38,9 +38,9 @@ For end-to-end Google provider acceptance, use **Test Account A** and **Test Acc
 | Member removal/self-leave and revocation | Emulator: PASS |
 | M1 live Firestore foreign-UID **READ** denial | **PASS** — user-reported staging REST 2026-10-16: 6/6; Anonymous B deleted |
 | M1 live foreign-UID **WRITE** denial | **PENDING** — emulator tested; no live write attempts |
-| A/B live invite and revocation security | **PENDING** — requires controlled Staging release |
+| A/B live invite, revocation and self-leave security | **PENDING** — live harness prepared, operator must execute with temporary Anonymous Auth B |
 | Joined-room discovery authorization (Emulator) | **PASS** — own UID-scoped group query, foreign/global denied, revoke disappears; live index not deployed |
-| Member collection-group index on Staging | **PENDING** — deploy and wait READY before UI rollout |
+| Member collection-group index on Staging | **READY / DEPLOYED** — Cloud Shell staging release log on commit 85433cd |
 | App Check + spending monitoring or approved equivalent abuse plan | **PENDING** |
 | Public share approval | **BLOCKED** |
 | Production deployment | **NOT AUTHORIZED** |
@@ -121,3 +121,40 @@ bash scripts/release-m2-staging.sh
 \`\`\`
 
 **No deployment can be performed by merely merging this PR**, and CI never receives staging credentials. A completed script and live verification on real devices remain necessary. All M2 Room/Invite writes become eligible for any Google-authenticated UID under the staged Rules, constrained by per-UID quotas but **not** by per-IP or global throttling; staging owner must approve this exposure and continue to monitor costs. This remains **not** a production authorization.
+
+
+## M2 live WRITE + Member acceptance with only one Google Account
+
+**This section supersedes the two-real-Google-accounts requirement for Firestore UID access-control testing.** The existing Google user acts as Owner A, and one fresh temporary Firebase Anonymous Auth UID acts as Member B. The test is a **controlled staging exercise**, NOT production/public opening and NOT a second Google provider verification.
+
+A source-only test harness \`scripts/staging-m2-live-acceptance.mjs\` exercises (a) A-vs-B forbidden reads, (b) four non-destructive denied writes, (c) two proper atomic invite redemptions, (d) re-query of joined rooms through the real composite index, (e) Owner removing B and immediate rights revocation, (f) replay rejection, (g) B rejoining with a separate fresh invite, and (h) B leaving. It deletes B's Auth user and checks residual Member access. All Firestore calls use a real B Firebase **ID token**; Cloud Shell's GCP credentials are deliberately not used for application authorization.
+
+**Safety:** Forbidden writes use impossible document-existence preconditions so that even wrongly permissive rules cannot mutate A's profile or create an unauthorized Member/Event. The expected rejection is HTTP 403; an API error/precondition code other than 403 is marked *inconclusive*, not PASS. Valid accepted invites are intentional writes; the two accepted invitation records remain in Staging as audit data even after B's Member record and Auth account are removed. If a test fails partway, the script attempts Member self-leave and deletes B; if cleanup cannot be verified, the Owner must remove the temporary member manually. This test creates **no new room** and uses two of the Owner's 10 daily invitation quota slots.
+
+### Operator-controlled test window
+
+1. In \`https://ourschedule.web.app\`, log in as the existing Google Owner A. Select **the same existing test room** with no other test Members. Generate **two different** one-time invitation links for that room. Store the links *locally* in a temporary password manager note or terminal prompt; do not send them in chat, a URL query, GitHub, Slack or screenshots. The UI may show only the last issued link; copy the first BEFORE creating the second. Make sure both are still pending. Do not log out.
+2. Ensure Firebase Staging \`ourschedule\` > Authentication > Sign-in method has **Google Enabled**. Once the links and Cloud Shell are ready, temporarily set **Anonymous Enabled** for the shortest attended time possible. This increases public anonymous signup access: NEVER do this in Production.
+3. From Google Cloud Shell, using a **reviewed merged commit that only adds the acceptance script and tests**, run:
+   \`\`\`bash
+   cd ~/OurSchedule
+   git status --short                # Must be clean
+   git fetch origin main
+   git checkout --detach <MERGED_ACCEPTANCE_SCRIPT_SHA>
+   # .env.local must be present and contain VITE_FIREBASE_PROJECT_ID=ourschedule
+   read -r -s -p "First invite (Owner removal): " INVITE_TOKEN_REMOVE; echo
+   read -r -s -p "Second invite (Member leave): " INVITE_TOKEN_LEAVE; echo
+   export INVITE_TOKEN_REMOVE INVITE_TOKEN_LEAVE
+   node --env-file=.env.local scripts/staging-m2-live-acceptance.mjs
+   result=$?
+   unset INVITE_TOKEN_REMOVE INVITE_TOKEN_LEAVE
+   echo "M2 live test exit code: $result"
+   \`\`\`
+   Never paste invite links/tokens, API keys, full UIDs, personal names or ID tokens into GitHub or chat.
+4. The script asks the operator to type \`LIVE M2 STAGING\` before creating test B. After B's first successful join, it prints only the first **8** characters of temporary B's UID (matching the masked row displayed in OurSchedule). In **Room Owner > จัดการสมาชิก**, find this exact temporary Member in the correct room, click **ลบสมาชิก**, then return to Cloud Shell and press Enter. Do not remove any other Member. The script automatically tests B's access denial, invite replay, second legitimate join, B self-leave and query disappearance.
+5. If the script reports **LIVE M2 WRITE/INVITE/MEMBER ACCEPTANCE: PASS** and confirms **Temporary Anonymous Firebase Auth user deleted**, then go to Firebase Console and **disable Anonymous Provider immediately**, regardless of PASS/FAIL. Review Authentication > Users for unwanted test Anonymous accounts. If cleanup was incomplete, remove the one test Member through Owner UI and investigate before disabling/closing the acceptance gate.
+6. Send only PASS/FAIL summary and whether **Anonymous Disabled** is visible in the Console. Existing UI on desktop/iOS/Android remains relevant; staging integration test supplements, not replaces, browser live smoke.
+
+### Explicit boundaries
+
+This script uses two *real* state-changing invite redemptions. They are intentional with Owner-generated fresh invites and an explicit CLI confirmation; it does not update or remove A's profile or room. **It is not a routine read-only script**. Admin/Auth service-account operations and any Production endpoint are out of scope. If reCAPTCHA/App Check enforcement is turned on for Firestore, this direct REST test must be revisited to use proper attestation; the script refuses when the Vite App Check site key is present. Per-UID 3 rooms/24h and 10 invites/24h quotas remain separate from public anti-abuse measures. Completion of this live test does **not** authorize Production, paid backend setup, or public room sharing.
