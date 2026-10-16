@@ -43,6 +43,10 @@ jobs:
         run: npm ls firebase @firebase/rules-unit-testing firebase-tools vitest @grpc/grpc-js --all || true
       - name: Check staging isolation harness syntax (no live calls in CI)
         run: node --check scripts/staging-auth-isolation.mjs
+      - name: Check M2 live acceptance script syntax (no staging access in CI)
+        run: node --check scripts/staging-m2-live-acceptance.mjs
+      - name: Offline tests for safe REST write builders (no staging credentials)
+        run: node --test tests/tools/m2-live-payloads.test.mjs
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Validate joined-room composite index configuration
