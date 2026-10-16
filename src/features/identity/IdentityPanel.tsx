@@ -1,7 +1,7 @@
 import { useIdentity } from './useIdentity';
 
-export default function IdentityPanel() {
-  const { state, busy, signIn, signOut } = useIdentity();
+export default function IdentityPanel({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const { state, busy, signIn, signOut } = identity;
   const authenticated = state.status === 'ready' || (state.status === 'error' && state.user !== null);
   const label = state.status === 'ready'
     ? `เชื่อมต่อบัญชีแล้ว: ${state.user.displayName || 'ผู้ใช้งาน'}`
