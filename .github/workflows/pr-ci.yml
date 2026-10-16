@@ -23,6 +23,8 @@ jobs:
           java-version: '21'
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Verify patched gRPC dependency tree
+        run: node scripts/check-grpc-lock.mjs
       - name: Production dependency audit (high+ gate, collect evidence)
         id: audit_prod
         continue-on-error: true
