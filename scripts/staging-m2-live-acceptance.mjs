@@ -19,7 +19,7 @@
  */
 import { createInterface } from 'node:readline/promises';
 import {
-  APP_PREFIX, DOC_API, DOC_ROOT, PROJECT, UID_PATTERN, parseInviteInput,
+  DOC_API, PROJECT, UID_PATTERN, parseInviteInput,
   validateStaging, pathOf, claimWrites, safeDeniedCreate, safeDeniedUpdate,
   joinedRoomsQuery,
 } from './lib/m2-live-payloads.mjs';
@@ -41,7 +41,6 @@ const apiAuthUrl = (operation) =>
 const documentUrl = (path) => DOC_API + '/' + path;
 const commitUrl = DOC_API + ':commit';
 const queryUrl = DOC_API + ':runQuery';
-const MAX_STEPS = 20;
 
 function errorMessage(e) {
   // Deliberately do not expose server response bodies, tokens or document IDs.
@@ -208,7 +207,7 @@ try {
     },
     {
       label: 'B denied CREATE A private event',
-      writes: [safeDeniedCreate(pathOf('users', first.owner, 'personalEvents', 'm2-isolation-probe'), {
+      writes: [safeDeniedCreate(pathOf('users', first.owner, 'personalEvents', 'm2-probe-' + crypto.randomUUID()), {
         title: { stringValue: 'security-test-should-never-write' },
       })],
     },
