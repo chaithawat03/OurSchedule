@@ -45,6 +45,8 @@ jobs:
         run: node --check scripts/staging-auth-isolation.mjs
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
+      - name: Validate joined-room composite index configuration
+        run: node scripts/check-m2-index.mjs
       - name: Lint
         run: npm run lint
       - name: Typecheck
