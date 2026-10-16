@@ -41,6 +41,12 @@ jobs:
           echo "Full dependency audit remains unresolved. See Issue #5. A green job with audit continue-on-error is NOT a security sign-off." >> "$GITHUB_STEP_SUMMARY"
       - name: Show resolved dependency versions
         run: npm ls firebase @firebase/rules-unit-testing firebase-tools vitest @grpc/grpc-js --all || true
+      - name: Check staging isolation harness syntax (no live calls in CI)
+        run: node --check scripts/staging-auth-isolation.mjs
+      - name: Check staging release script syntax (no deployment in CI)
+        run: bash -n scripts/release-m2-staging.sh
+      - name: Validate joined-room composite index configuration
+        run: node scripts/check-m2-index.mjs
       - name: Lint
         run: npm run lint
       - name: Typecheck

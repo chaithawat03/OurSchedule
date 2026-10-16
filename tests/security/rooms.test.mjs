@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { includeQuota } from './quotaHelpers.mjs';
 import { after, before, describe, it } from 'node:test';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment,
@@ -42,6 +43,7 @@ async function createRoom(uid, roomId) {
   const db = ownerDb(uid);
   const { room, member } = refs(db, roomId, uid);
   const batch = writeBatch(db);
+  await includeQuota(batch, db, uid, 'rooms', roomId);
   batch.set(room, roomData(uid));
   batch.set(member, ownerData(uid));
   await assertSucceeds(batch.commit());
@@ -49,6 +51,50 @@ async function createRoom(uid, roomId) {
 }
 
 describe('M2.1 room owner-only authorization', () => {
+
+  it('blocks missing quota step, tampered resets and quota deletion', async () => {
+    const db = ownerDb('room-quota-attacker');
+    const roomId = 'room-unmetered';
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'rooms', roomId), roomData('room-quota-attacker'));
+    batch.set(doc(db, 'rooms', roomId, 'members', 'room-quota-attacker'), ownerData('room-quota-attacker'));
+    await assertFails(batch.commit());
+    await createRoom('room-quota-attacker', 'room-metered');
+    const counter = doc(db, 'users', 'room-quota-attacker', 'quotas', 'rooms');
+    await assertFails(updateDoc(counter, {
+      count: 0, updatedAt: serverTimestamp(), lastResourceId: 'room-bypass',
+    }));
+    await assertFails(updateDoc(counter, {
+      count: 1, windowStart: serverTimestamp(), updatedAt: serverTimestamp(), lastResourceId: 'room-reset',
+    }));
+    await assertFails(deleteDoc(counter));
+  });
+
+  it('does not allow one quota increment to pay for two room creates', async () => {
+    const uid = 'room-multicreate';
+    const db = ownerDb(uid);
+    const batch = writeBatch(db);
+    await includeQuota(batch, db, uid, 'rooms', 'room-one');
+    for (const id of ['room-one', 'room-two']) {
+      batch.set(doc(db, 'rooms', id), roomData(uid));
+      batch.set(doc(db, 'rooms', id, 'members', uid), ownerData(uid));
+    }
+    await assertFails(batch.commit());
+  });
+
+  it('enforces a rolling three-room cap even with a direct Firestore write', async () => {
+    const uid = 'room-daily-cap';
+    for (const id of ['room-quota-1', 'room-quota-2', 'room-quota-3']) {
+      await createRoom(uid, id);
+    }
+    const db = ownerDb(uid);
+    const batch = writeBatch(db);
+    await includeQuota(batch, db, uid, 'rooms', 'room-quota-4');
+    batch.set(doc(db, 'rooms', 'room-quota-4'), roomData(uid));
+    batch.set(doc(db, 'rooms', 'room-quota-4', 'members', uid), ownerData(uid));
+    await assertFails(batch.commit());
+  });
+
   it('atomically creates a room and matching immutable owner membership', async () => {
     const { db, room, member } = await createRoom('room-creator', 'room-atomic');
     const roomSnapshot = await assertSucceeds(getDoc(room));
@@ -125,6 +171,8 @@ describe('M2.1 room owner-only authorization', () => {
     const outsider = ownerDb('new-person');
     await assertFails(setDoc(doc(outsider, 'rooms', 'room-undeletable', 'members', 'new-person'), ownerData('new-person')));
     await assertFails(getDocs(collection(owner, 'rooms', 'room-undeletable', 'members')));
+    await assertSucceeds(getDocs(query(collection(owner, 'rooms', 'room-undeletable', 'members'), limit(20))));
+    await assertFails(getDocs(query(collection(owner, 'rooms', 'room-undeletable', 'members'), limit(21))));
   });
 
   it('keeps all nested events, details, projections, and invitations denied', async () => {

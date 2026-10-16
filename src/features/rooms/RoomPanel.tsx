@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import { createOwnedRoom, listOwnedRooms, type OwnedRoom } from '../../services/rooms';
+import InvitationPanel from './InvitationPanel';
+import JoinedRooms from './JoinedRooms';
+import MemberManager from './MemberManager';
 
 export default function RoomPanel({ user }: { user: User | null }) {
   const [name, setName] = useState('');
@@ -47,7 +50,7 @@ export default function RoomPanel({ user }: { user: User | null }) {
       <div className="room-panel-header">
         <div>
           <h2>ห้องของฉัน</h2>
-          <p>สร้างห้องส่วนตัวได้ก่อน ส่วนการเชิญสมาชิกและกิจกรรมจะแยกตรวจสอบในขั้นถัดไป</p>
+          <p>คำเชิญทดลองแบบใช้ครั้งเดียว อายุไม่เกิน 48 ชั่วโมง พร้อมการยืนยันบัญชีผู้รับก่อนเข้าร่วมห้อง</p>
         </div>
         <span className="room-count">สูงสุด 20 ห้องในรายการ</span>
       </div>
@@ -62,8 +65,11 @@ export default function RoomPanel({ user }: { user: User | null }) {
           {loading ? <p role="status">กำลังโหลดห้อง...</p>
             : rooms.length === 0 ? <p>ยังไม่มีห้องที่คุณเป็นเจ้าของ</p>
               : <ul className="room-list">{rooms.map((room) =>
-                <li key={room.id}><strong>{room.name}</strong><small>Owner · สมาชิก 1 คน · ยังไม่เปิดการแชร์</small></li>,
+                <li key={room.id}><strong>{room.name}</strong><small>Owner · จัดการสมาชิกได้ด้านล่าง</small></li>,
               )}</ul>}
+          <InvitationPanel user={user} rooms={rooms} onJoined={() => setRefresh((value) => value + 1)} />
+          <JoinedRooms user={user} refreshKey={refresh} />
+          <MemberManager user={user} rooms={rooms} />
         </>
       ) : <p>เข้าสู่ระบบด้วย Google เพื่อสร้างและดูห้องที่คุณเป็นเจ้าของ</p>}
     </section>
