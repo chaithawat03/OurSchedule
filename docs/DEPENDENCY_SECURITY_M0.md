@@ -17,7 +17,13 @@ Address audit findings identified against foundation commit `e9e46be8016c1ab379d
 - `firebase-tools`: upgrade to major 15, applying later CLI fixes.
 - `vitest`: upgrade to major 5, applying later test-tool fixes.
 - Node.js engine: 22.12+ on Node.js 22 LTS line; CI runs Node 22 and Java 21.
-- CI uses a checked-in lockfile with `npm ci`. Both production and full-dependency `npm audit --audit-level=high` are required checks. Remaining high/critical findings are **not silently waived**.
+- CI uses a checked-in lockfile with `npm ci`. The **production** High/Critical audit is a hard CI gate. The **full development** audit runs as a visibly failing advisory step while regression tests continue; this does NOT waive the findings or imply security sign-off. PR remains DRAFT pending security review.
+
+## Initial CI result (2026-10-16)
+
+The first regenerated-lockfile run resolved and installed successfully. Production dependency audit passed at High+ threshold (no high/critical findings in `--omit=dev`). Full audit still reported **12 findings: 4 moderate, 8 high, 0 critical**, and initially stopped CI before tests; the workflow now surfaces the audit failure clearly and continues functional tests. Remaining High paths include `@firebase/firestore -> @grpc/grpc-js` under the dev-only test SDK and `firebase-tools -> chokidar/braces` in CLI tooling. This is a partial remediation, not a clean full audit.
+
+Do not merge until residual High findings are resolved or a documented, authorized security risk acceptance is recorded. Do not treat `continue-on-error` in the full-audit step as evidence that all packages are safe.
 
 ## Security guardrails
 
@@ -39,7 +45,7 @@ npm run test:rules
 npm run build
 ```
 
-Merge gate: reproducible lockfile, clean required checks, code diff review, test evidence. After merge: redeploy the newly approved SHA to staging and verify before production. **This PR does not auto-deploy.**
+Merge gate: reproducible lockfile, clean production audit and regression checks, code diff review, test evidence **and explicit resolution or security acceptance of outstanding development High findings**. After merge: redeploy the newly approved SHA to staging and verify before production. **This PR does not auto-deploy.**
 
 ## Source references
 
