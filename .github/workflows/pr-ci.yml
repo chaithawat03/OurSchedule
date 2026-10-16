@@ -23,7 +23,9 @@ jobs:
           java-version: '21'
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
-      - name: Production dependency audit (high+ gate)
+      - name: Production dependency audit (high+ gate, collect evidence)
+        id: audit_prod
+        continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
       - name: Full dependency audit (known upstream findings — visible advisory)
         id: audit_full
@@ -47,3 +49,8 @@ jobs:
         run: npm run test:rules
       - name: Production build
         run: npm run build
+      - name: Enforce production dependency audit after regression tests
+        if: ${{ always() && steps.audit_prod.outcome == 'failure' }}
+        run: |
+          echo "::error::Production dependency audit has unresolved High+ findings. PR is blocked; see Issue #5."
+          exit 1
