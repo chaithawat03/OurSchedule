@@ -11,7 +11,9 @@
     "lint": "eslint src",
     "test:unit": "vitest run",
     "test:rules": "firebase emulators:exec --only firestore --project demo-ourschedule-ci \"node --test tests/security/*.test.mjs\"",
-    "test": "npm run test:unit && npm run test:rules"
+    "test": "npm run test:unit && npm run test:rules",
+    "test:e2e:browser": "playwright test --config playwright.config.mjs",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-ourschedule-e2e \"npm run test:e2e:browser\""
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -31,7 +33,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.0",
     "vite": "^7.1.0",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.4",
+    "@playwright/test": "1.56.1"
   },
   "engines": {
     "node": ">=24.12.0 <25"
