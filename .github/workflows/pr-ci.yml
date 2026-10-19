@@ -51,6 +51,8 @@ jobs:
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m3-staging.sh
+      - name: Check M3.2a staging script syntax (no deployment in CI)
+        run: bash -n scripts/release-m3-2a-staging.sh
       - name: Validate joined-room composite index configuration
         run: node scripts/check-m2-index.mjs
       - name: Lint
