@@ -51,6 +51,34 @@ export async function deleteSyntheticAuthUser(apiKey, idToken, fetchImpl = fetch
   await strictJson(response, 'Firebase test identity self-delete');
 }
 
+
+/**
+ * Reconcile one fixed synthetic UID even if a browser failed after Firebase
+ * created the Auth user but before the UI runner received its ID token.
+ * Uses a brand-new custom-token sign-in only for the strictly allowed test UID
+ * and self-deletes it. No Admin SDK, user listing or Firestore access.
+ */
+export async function reconcileSyntheticAuthUser({
+  apiKey, serviceAccount, oauthToken, uid, fetchImpl = fetch,
+}) {
+  assert.ok(SYNTHETIC_UIDS.includes(uid), 'Refusing cleanup of non-test identity');
+  const token = await mintFirebaseCustomToken({
+    serviceAccount, oauthToken, uid, fetchImpl,
+  });
+  const response = await fetchImpl(
+    'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=' +
+      encodeURIComponent(apiKey),
+    { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token, returnSecureToken: true }),
+      signal: AbortSignal.timeout(15000) },
+  );
+  const identity = await strictJson(response, 'Firebase synthetic UID reconciliation');
+  assert.equal(identity.localId, uid, 'Refusing cleanup for mismatched Firebase UID');
+  assert.ok(typeof identity.idToken === 'string' && identity.idToken.length > 50,
+    'Missing test Firebase ID token');
+  await deleteSyntheticAuthUser(apiKey, identity.idToken, fetchImpl);
+}
+
 export async function rulesGetDocument(idToken, segments, fetchImpl = fetch) {
   assert.ok(Array.isArray(segments) && segments.length >= 2);
   assert.ok(segments.every((part) => /^[a-zA-Z0-9_-]{1,128}$/.test(part)),
