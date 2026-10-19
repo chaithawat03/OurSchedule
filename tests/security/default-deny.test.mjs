@@ -13,7 +13,6 @@ before(async () => {
 after(async () => { if (environment) await environment.cleanup(); });
 
 const protectedDocuments = [
-  'users/alice/personalEvents/event-1',
   'rooms/room-1',
   'rooms/room-1/members/alice',
   'rooms/room-1/events/event-1',

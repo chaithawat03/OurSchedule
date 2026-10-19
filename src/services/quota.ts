@@ -2,8 +2,8 @@ import {
   doc, serverTimestamp, Timestamp, type Firestore, type Transaction,
 } from 'firebase/firestore';
 
-export type QuotaKind = 'rooms' | 'invites';
-const LIMITS: Record<QuotaKind, number> = { rooms: 3, invites: 10 };
+export type QuotaKind = 'rooms' | 'invites' | 'personalEvents';
+const LIMITS: Record<QuotaKind, number> = { rooms: 3, invites: 10, personalEvents: 20 };
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function getQuotaLimit(kind: QuotaKind): number {
@@ -22,7 +22,8 @@ export async function consumeQuota(
   if (count > LIMITS[kind]) {
     throw new Error(kind === 'rooms'
       ? 'สร้างห้องได้ไม่เกิน 3 ห้องต่อ 24 ชั่วโมง'
-      : 'สร้างคำเชิญได้ไม่เกิน 10 ครั้งต่อ 24 ชั่วโมง');
+      : kind === 'invites' ? 'สร้างคำเชิญได้ไม่เกิน 10 ครั้งต่อ 24 ชั่วโมง'
+      : 'สร้างกิจกรรมส่วนตัวได้ไม่เกิน 20 ครั้งต่อ 24 ชั่วโมง');
   }
   return {
     ref,
