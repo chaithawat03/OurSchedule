@@ -8,7 +8,7 @@ Phase 1 (#20) uses real Playwright UI flow + synthetic Firebase Emulators. Phase
 
 Firebase Authentication custom-token login works without enabling the Anonymous sign-in provider. This does NOT test Google's OAuth redirect itself, nor M3.2a accept/decline/revoke on Staging.
 
-**Residual data:** Existing Rules prohibit hard deletion of user profiles, rooms and events. This smoke allows only two fixed synthetic UIDs (`e2e_staging_owner_v1` and `e2e_staging_member_v1`). Their matching Firestore profile docs persist between test runs. The Auth user records are self-deleted; if interrupted, cleanup failure must be reconciled in Firebase Console. These profiles are not user-private content, but they are a deliberate Staging write. This is WHY the opt-in is disabled by default. Do not enable write-heavy M3.2a scenarios on a cron until a reviewed, least-privilege cleanup/reconciliation procedure is available.
+**Residual data:** Existing Rules prohibit hard deletion of user profiles, rooms and events. This smoke allows only two fixed synthetic UIDs (`e2e_staging_owner_v1` and `e2e_staging_member_v1`). Their matching Firestore profile docs persist between test runs. The Firebase App ID is checked against the STAGING project number (400176852634). The runner now re-authenticates and self-deletes both allowlisted synthetic UIDs independently of whether browser setup succeeded, so a partial sign-in also receives cleanup. A hard process termination or IAM outage can still leave an Auth UID: failed cleanup is reported as a blocker requiring manual reconciliation in Firebase Console. These profiles are not user-private content, but they are a deliberate Staging write. This is WHY the opt-in is disabled by default. Do not enable write-heavy M3.2a scenarios on a cron until a reviewed, least-privilege cleanup/reconciliation procedure is available.
 
 ## Security design
 
@@ -29,7 +29,7 @@ Firebase Authentication custom-token login works without enabling the Anonymous 
 5. After approving the two stable residual profile docs, set repository variable `STAGING_E2E_APPROVE_PERSISTENT_PROFILES=true`, then explicitly set `STAGING_E2E_ENABLED=true`. Run the workflow manually once and verify cleanup and denial assertions. Leave both disabled until this review.
 6. On failure, leave the automation disabled, inspect the two known test UIDs in Firebase Authentication, and avoid deleting unrelated user data. Account self-deletion and matching two profile paths are the only cleanup scope.
 
-Scheduled cadence, when enabled: weekdays at 21:17 UTC / 04:17 Bangkok the following day. This is a **read-isolation smoke only**. Do not label M3.2a Live security PASS.
+Scheduled cadence, when enabled: Sunday–Thursday 21:17 UTC / Monday–Friday 04:17 Bangkok. This is a **read-isolation smoke only**. Do not label M3.2a Live security PASS.
 
 ## Still outstanding for complete unattended M3.2a LIVE
 
