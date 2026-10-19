@@ -1,33 +1,32 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
+import { confirmAction, showError, showSuccess } from '../../lib/alerts';
 import { listJoinedRooms, type JoinedRoom } from '../../services/rooms';
 import { leaveRoom } from '../../services/invitations';
 
 export default function JoinedRooms({ user, refreshKey }: { user: User; refreshKey: number }) {
   const [rooms, setRooms] = useState<JoinedRoom[]>([]);
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     let current = true;
-    setMessage('');
     setRooms([]);
     void listJoinedRooms(user)
       .then((values) => { if (current) setRooms(values); })
-      .catch(() => { if (current) setMessage('ไม่สามารถโหลดห้องที่เข้าร่วมได้'); });
+      .catch(() => { if (current) showError('ไม่สามารถโหลดห้องที่เข้าร่วมได้'); });
     return () => { current = false; };
   }, [user, refreshKey]);
 
   const leave = async (roomId: string) => {
     if (working) return;
+    if (!await confirmAction({ title: 'ต้องการออกจากห้อง?', text: 'สิทธิ์เข้าถึงห้องและกิจกรรมจะถูกเพิกถอน', confirmText: 'ออกจากห้อง' })) return;
     setWorking(true);
-    setMessage('');
     try {
       await leaveRoom(user, roomId);
       setRooms((previous) => previous.filter((room) => room.id !== roomId));
-      setMessage('ออกจากห้องแล้ว');
+      showSuccess('ออกจากห้องแล้ว');
     } catch {
-      setMessage('ไม่สามารถออกจากห้องได้ กรุณาลองใหม่');
+      showError('ไม่สามารถออกจากห้องได้ กรุณาลองใหม่');
     } finally {
       setWorking(false);
     }
@@ -46,7 +45,6 @@ export default function JoinedRooms({ user, refreshKey }: { user: User; refreshK
           </li>)}
         </ul>
       )}
-      {message && <p role="status">{message}</p>}
     </section>
   );
 }

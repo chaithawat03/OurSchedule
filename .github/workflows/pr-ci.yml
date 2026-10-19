@@ -25,6 +25,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify patched gRPC dependency tree
         run: node scripts/check-grpc-lock.mjs
+      - name: Verify SweetAlert2 pinned version and integrity lock
+        run: node scripts/check-sweetalert-lock.mjs
       - name: Production dependency audit (high+ gate, collect evidence)
         id: audit_prod
         continue-on-error: true
@@ -55,6 +57,8 @@ jobs:
         run: bash -n scripts/release-m3-2a-staging.sh
       - name: Validate joined-room composite index configuration
         run: node scripts/check-m2-index.mjs
+      - name: Prevent native browser alert, confirm, and prompt regressions
+        run: node scripts/check-native-dialogs.mjs
       - name: Lint
         run: npm run lint
       - name: Typecheck

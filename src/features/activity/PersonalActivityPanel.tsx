@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
+import { confirmAction, showError, showSuccess } from '../../lib/alerts';
 import { bangkokInstant, bangkokLocal, nextBangkokDay, overlapsDay, validateActivity } from '../../lib/activityDates';
 import { cancelPersonalActivity, savePersonalActivity, type PersonalActivity } from '../../services/personalActivities';
 
@@ -21,10 +22,9 @@ export default function PersonalActivityPanel({ user, day, events, busy, error, 
   const [end, setEnd] = useState(day + 'T10:00');
   const [allDay, setAllDay] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    setEditing(null); setTitle(''); setNotes(''); setAllDay(false); setFormError('');
+    setEditing(null); setTitle(''); setNotes(''); setAllDay(false);
     setStart(day + 'T09:00'); setEnd(day + 'T10:00');
   }, [day, user?.uid]);
 
@@ -34,38 +34,41 @@ export default function PersonalActivityPanel({ user, day, events, busy, error, 
     setEditing(event.id);
     setTitle(event.title); setNotes(event.notes); setAllDay(event.allDay);
     setStart(bangkokLocal(event.start)); setEnd(bangkokLocal(event.end));
-    setFormError('');
+
   };
 
   const reset = () => {
     setEditing(null); setTitle(''); setNotes(''); setAllDay(false);
-    setStart(day + 'T09:00'); setEnd(day + 'T10:00'); setFormError('');
+    setStart(day + 'T09:00'); setEnd(day + 'T10:00');
   };
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!user || saving) return;
-    setSaving(true); setFormError('');
+    setSaving(true);
     try {
       const startAt = bangkokInstant(allDay ? start.slice(0, 10) + 'T00:00' : start);
       const endAt = bangkokInstant(allDay ? nextBangkokDay(start.slice(0, 10)) + 'T00:00' : end);
       const values = validateActivity({ title, notes, start: startAt, end: endAt });
       await savePersonalActivity(user, { ...values, start: startAt, end: endAt, allDay }, editing ?? undefined);
       reset(); onUpdated();
+      showSuccess(editing ? 'แก้ไขกิจกรรมสำเร็จ' : 'สร้างกิจกรรมสำเร็จ');
     } catch (cause: unknown) {
-      setFormError(cause instanceof Error ? cause.message : 'บันทึกไม่สำเร็จ');
+      showError(cause instanceof Error ? cause.message : 'บันทึกไม่สำเร็จ');
     } finally { setSaving(false); }
   };
 
   const cancel = async (id: string) => {
-    if (!user || saving || !window.confirm('ยกเลิกกิจกรรมนี้หรือไม่?')) return;
-    setSaving(true); setFormError('');
+    if (!user || saving) return;
+    if (!await confirmAction({ title: 'ยกเลิกกิจกรรมนี้หรือไม่?', text: 'กิจกรรมที่ยกเลิกแล้วไม่สามารถเปิดใช้งานอีกครั้ง', confirmText: 'ยกเลิกกิจกรรม' })) return;
+    setSaving(true);
     try {
       await cancelPersonalActivity(user, id);
       if (editing === id) reset();
       onUpdated();
+      showSuccess('ยกเลิกกิจกรรมแล้ว');
     } catch {
-      setFormError('ยกเลิกกิจกรรมไม่สำเร็จ');
+      showError('ยกเลิกกิจกรรมไม่สำเร็จ');
     } finally { setSaving(false); }
   };
 
@@ -101,7 +104,6 @@ export default function PersonalActivityPanel({ user, day, events, busy, error, 
             {!allDay && <label>สิ้นสุด <input type="datetime-local" value={end}
               onChange={(e) => setEnd(e.target.value)} required disabled={saving} /></label>}
           </div>
-          {formError && <p role="alert" className="personal-error">{formError}</p>}
           <div className="personal-actions">
             <button type="submit" disabled={saving}>{saving ? 'กำลังบันทึก...' :
               editing ? 'บันทึกการแก้ไข' : 'เพิ่มกิจกรรม'}</button>
