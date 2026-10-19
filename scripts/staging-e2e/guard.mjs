@@ -19,7 +19,7 @@ export function validateStagingEnv(env) {
     'Staging E2E must not run on pull_request or untrusted events');
   assert.match(env.STAGING_E2E_API_KEY ?? '', /^[A-Za-z0-9_-]{15,128}$/,
     'Missing or invalid public Firebase Web API key');
-  assert.match(env.STAGING_E2E_APP_ID ?? '', /^1:[0-9]+:web:[a-zA-Z0-9]+$/,
+  assert.match(env.STAGING_E2E_APP_ID ?? '', /^1:400176852634:web:[a-zA-Z0-9]+$/,
     'Missing or invalid Staging Firebase Web App ID');
   assert.match(env.STAGING_E2E_SERVICE_ACCOUNT ?? '',
     /^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]+\.iam\.gserviceaccount\.com$/,
