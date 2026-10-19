@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'vite';
-import { customTokenUnsignedPayload, mintFirebaseCustomToken,
+import { customTokenUnsignedPayload, deleteSyntheticAuthUser, mintFirebaseCustomToken,
   reconcileSyntheticAuthUser, rulesGetDocument } from '../../scripts/staging-e2e/identity.mjs';
 
 test('runner-only Firebase Auth bootstrap is bundled without external chunks', async () => {
@@ -92,7 +92,10 @@ test('reconciliation recovers a synthetic account without an existing browser se
       }
       if (operation === 'delete') {
         assert.equal(JSON.parse(init.body).idToken, 'x'.repeat(75));
-        return { ok: true, json: async () => ({}) };
+        // Identity Toolkit may respond HTTP 200 with NO JSON body at all.
+        return { ok: true, status: 200, json: async () => {
+          throw new SyntaxError('Unexpected end of JSON input');
+        } };
       }
       throw new Error('Unexpected mock endpoint');
     },
@@ -137,4 +140,29 @@ test('cleanup denies unknown user without making any HTTP call', async () => {
     fetchImpl: async () => { calls++; throw new Error('must not call'); },
   }));
   assert.equal(calls, 0);
+});
+
+
+test('Auth deletion HTTP 200 without a response body is successful', async () => {
+  let called = false;
+  await deleteSyntheticAuthUser('synthetic-web-api-key', 'temporary-test-id-token',
+    async (url, request) => {
+      called = true;
+      assert.ok(url.includes('accounts:delete'));
+      assert.equal(JSON.parse(request.body).idToken, 'temporary-test-id-token');
+      return {
+        ok: true,
+        status: 200,
+        json: () => { throw new Error('Must not attempt JSON parse on delete success'); },
+      };
+    });
+  assert.equal(called, true);
+});
+
+test('Auth deletion reports sanitized HTTP status when server refuses deletion', async () => {
+  await assert.rejects(deleteSyntheticAuthUser('synthetic-web-api-key', 'temporary-test-id-token',
+    async () => ({
+      ok: false, status: 403,
+      json: () => { throw new Error('Must not parse potentially sensitive response body'); },
+    })), /Firebase test identity self-delete failed \(HTTP 403\)/);
 });
