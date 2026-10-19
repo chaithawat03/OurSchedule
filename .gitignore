@@ -11,3 +11,6 @@ coverage/
 .DS_Store
 service-account*.json
 **/*serviceAccount*.json
+
+playwright-report/
+test-results/

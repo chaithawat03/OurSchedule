@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 const config = {
@@ -29,7 +29,20 @@ if (app && typeof appCheckSiteKey === 'string' && appCheckSiteKey.trim().length 
   });
 }
 
-export const firebaseClient = app ? {
-  auth: getAuth(app),
-  db: getFirestore(app),
-} : null;
+// The emulator test mode is allowed ONLY on Vite's dev server with an
+// isolated demo Firebase project. A production build must never use it.
+const emulatorRequested = import.meta.env.VITE_E2E_EMULATORS === '1';
+const emulatorAllowed = import.meta.env.DEV
+  && config.projectId === 'demo-ourschedule-e2e'
+  && config.authDomain === 'demo-ourschedule-e2e.firebaseapp.com'
+  && config.apiKey === 'fake-demo-e2e-only';
+if (emulatorRequested && !emulatorAllowed) {
+  throw new Error('Refusing E2E emulator mode outside the isolated local demo project');
+}
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
+if (emulatorRequested && auth && db) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}
+export const firebaseClient = auth && db ? { auth, db } : null;
