@@ -414,7 +414,7 @@ service cloud.firestore {
         && room.ownerUid == request.auth.uid
         && event.creatorUid == request.auth.uid
         && eligibleRecipient(roomId, event.recipientUid, request.time)
-        && quotaConsumed(request.auth.uid, 'roomEvents', eventId, 20)
+        && quotaConsumed(request.auth.uid, 'roomEvents', roomId + '_' + eventId, 20)
         && inbox.roomId == roomId && inbox.eventId == eventId
         && inbox.creatorUid == event.creatorUid
         && inbox.recipientUid == event.recipientUid

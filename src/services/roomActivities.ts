@@ -58,7 +58,7 @@ export async function createPrivateRoomAssignment(
     }
     const initialState: AssignmentState =
       room.data().assignmentPolicy === 'AUTO_ASSIGN' ? 'ACCEPTED' : 'PENDING';
-    const quota = await consumeQuota(transaction, db, creator.uid, 'roomEvents', eventRef.id);
+    const quota = await consumeQuota(transaction, db, creator.uid, 'roomEvents', roomId + '_' + eventRef.id);
     const startAt = Timestamp.fromDate(input.start);
     const endAt = Timestamp.fromDate(input.end);
     transaction.set(quota.ref, quota.next);

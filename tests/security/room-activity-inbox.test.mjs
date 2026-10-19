@@ -59,7 +59,7 @@ const inboxRef = (d, recipientUid, eventId) => doc(d, 'users', recipientUid, 'ro
 async function createPair(roomId, owner, recipient, eventId, policy = 'REQUIRE_ACCEPTANCE', overrides = {}) {
   const d = db(owner);
   const batch = writeBatch(d);
-  await includeQuota(batch, d, owner, 'roomEvents', eventId);
+  await includeQuota(batch, d, owner, 'roomEvents', roomId + '_' + eventId);
   batch.set(eventRef(d, roomId, eventId), eventData(roomId, owner, recipient, overrides.event));
   batch.set(inboxRef(d, recipient, eventId), inboxData(roomId, eventId, owner, recipient, policy, overrides.inbox));
   return batch.commit();
@@ -71,13 +71,31 @@ describe('M3.2a per-member PRIVATE room activity offer', () => {
     const owner = db('a-atomic');
     await assertFails(setDoc(eventRef(owner, 'r-atomic', 'lonely'), eventData('r-atomic', 'a-atomic', 'b-atomic')));
     const forged = writeBatch(owner);
-    await includeQuota(forged, owner, 'a-atomic', 'roomEvents', 'wrong');
+    await includeQuota(forged, owner, 'roomEvents', 'r-atomic_wrong');
     forged.set(eventRef(owner, 'r-atomic', 'wrong'), eventData('r-atomic', 'a-atomic', 'b-atomic'));
     await assertFails(forged.commit());
     await assertFails(setDoc(inboxRef(owner, 'b-atomic', 'fake'),
       inboxData('r-atomic', 'fake', 'a-atomic', 'b-atomic')));
     await assertSucceeds(createPair('r-atomic', 'a-atomic', 'b-atomic', 'correct'));
     await assertFails(createPair('r-atomic', 'b-atomic', 'a-atomic', 'unauthorized'));
+  });
+
+
+  it('cannot reuse one daily quota step to create same event ID in two rooms', async () => {
+    await seedRoom('r-shared-1', 'a-shared', 'b-shared-1');
+    await seedRoom('r-shared-2', 'a-shared', 'b-shared-2');
+    const d = db('a-shared');
+    const first = writeBatch(d);
+    await includeQuota(first, d, 'a-shared', 'roomEvents', 'r-shared-1_same-id');
+    first.set(eventRef(d, 'r-shared-1', 'same-id'),
+      eventData('r-shared-1', 'a-shared', 'b-shared-1'));
+    first.set(inboxRef(d, 'b-shared-1', 'same-id'),
+      inboxData('r-shared-1', 'same-id', 'a-shared', 'b-shared-1'));
+    first.set(eventRef(d, 'r-shared-2', 'same-id'),
+      eventData('r-shared-2', 'a-shared', 'b-shared-2'));
+    first.set(inboxRef(d, 'b-shared-2', 'same-id'),
+      inboxData('r-shared-2', 'same-id', 'a-shared', 'b-shared-2'));
+    await assertFails(first.commit());
   });
 
   it('recipient sees only direct inbox until accepting; then can read own event but not room-wide list', async () => {
