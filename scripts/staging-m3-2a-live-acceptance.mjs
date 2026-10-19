@@ -203,41 +203,41 @@ try {
 
   console.log('\nOne joined Member now exists in room. Refresh Owner UI member list.');
   if (!onlyRevocation) {
-  const first = await createStage(LABEL_ACCEPT, 0);
-  await expectEventDenied('PENDING B denied private event details', first);
-  expect('B denied fake status+creator manipulation',
-    await codeOf([safeDeniedUpdate(
-      pathOf('users', uid, 'roomActivityInvites', first),
-      { creatorUid: { stringValue: uid }, state: { stringValue: 'ACCEPTED' } },
-    )]), 403);
-  expect('B cannot create unrelated Owner invite',
-    await codeOf([safeDeniedCreate(
-      pathOf('users', ownerUid, 'roomActivityInvites', 'm3-test-' + crypto.randomUUID()),
-      { state: { stringValue: 'ACCEPTED' } },
-    )]), 403);
-  expect('B accepts assignment with server timestamp',
-    await codeOf(decideInvitation(uid, first, 'ACCEPTED')), 200);
-  expect('Accepted Member B can read exactly assigned PRIVATE event',
-    await statusOf(getDoc('rooms/' + roomId + '/events/' + first)), 200);
-  expect('B cannot edit Creator event data',
-    await codeOf([safeDeniedUpdate(pathOf('rooms', roomId, 'events', first), {
-      title: { stringValue: 'NOT-WRITTEN' },
-    })]), 403);
-  expect('B cannot list PRIVATE event collection',
-    await statusOf(request(queryUrl(roomEventsListQuery(roomId).parent), 'POST', idToken,
-      roomEventsListQuery(roomId).body)), 403);
+    const first = await createStage(LABEL_ACCEPT, 0);
+    await expectEventDenied('PENDING B denied private event details', first);
+    expect('B denied fake status+creator manipulation',
+      await codeOf([safeDeniedUpdate(
+        pathOf('users', uid, 'roomActivityInvites', first),
+        { creatorUid: { stringValue: uid }, state: { stringValue: 'ACCEPTED' } },
+      )]), 403);
+    expect('B cannot create unrelated Owner invite',
+      await codeOf([safeDeniedCreate(
+        pathOf('users', ownerUid, 'roomActivityInvites', 'm3-test-' + crypto.randomUUID()),
+        { state: { stringValue: 'ACCEPTED' } },
+      )]), 403);
+    expect('B accepts assignment with server timestamp',
+      await codeOf(decideInvitation(uid, first, 'ACCEPTED')), 200);
+    expect('Accepted Member B can read exactly assigned PRIVATE event',
+      await statusOf(getDoc('rooms/' + roomId + '/events/' + first)), 200);
+    expect('B cannot edit Creator event data',
+      await codeOf([safeDeniedUpdate(pathOf('rooms', roomId, 'events', first), {
+        title: { stringValue: 'NOT-WRITTEN' },
+      })]), 403);
+    expect('B cannot list PRIVATE event collection',
+      await statusOf(request(queryUrl(roomEventsListQuery(roomId).parent), 'POST', idToken,
+        roomEventsListQuery(roomId).body)), 403);
 
-  console.log('\nOWNER ACTION: cancel ONLY the activity titled ' + LABEL_ACCEPT);
-  await pause('After cancellation confirmation and SweetAlert2 toast, press Enter: ');
-  await expectEventDenied('Cancelled PRIVATE event no longer readable to B', first);
+    console.log('\nOWNER ACTION: cancel ONLY the activity titled ' + LABEL_ACCEPT);
+    await pause('After cancellation confirmation and SweetAlert2 toast, press Enter: ');
+    await expectEventDenied('Cancelled PRIVATE event no longer readable to B', first);
 
-  const second = await createStage(LABEL_DECLINE, 1);
-  await expectEventDenied('Pending B denied second PRIVATE event', second);
-  expect('B declines second assignment',
-    await codeOf(decideInvitation(uid, second, 'DECLINED')), 200);
-  await expectEventDenied('Declined PRIVATE event remains unreadable to B', second);
-  expect('B cannot change declined decision to accepted',
-    await codeOf(decideInvitation(uid, second, 'ACCEPTED')), 403);
+    const second = await createStage(LABEL_DECLINE, 1);
+    await expectEventDenied('Pending B denied second PRIVATE event', second);
+    expect('B declines second assignment',
+      await codeOf(decideInvitation(uid, second, 'DECLINED')), 200);
+    await expectEventDenied('Declined PRIVATE event remains unreadable to B', second);
+    expect('B cannot change declined decision to accepted',
+      await codeOf(decideInvitation(uid, second, 'ACCEPTED')), 403);
 
   }
   const third = await createStage(LABEL_REVOKE, onlyRevocation ? 0 : 2);
@@ -282,6 +282,9 @@ try {
       memberCleaned = false;
       console.error('WARNING: Could not verify Member cleanup; Owner must remove B manually');
     }
+  }
+  if (!testPassed && memberCleaned) {
+    console.log('Cleanup of temporary Member is NOT proof of Owner-triggered revocation.');
   }
   if (idToken) {
     try {
