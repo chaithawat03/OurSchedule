@@ -53,6 +53,11 @@ jobs:
         run: node --check scripts/staging-m3-2a-live-acceptance.mjs
       - name: Offline tests of M3.2a recipient REST request builders
         run: node --test tests/tools/m3-room-live-payloads.test.mjs
+      - name: Validate opt-in STAGING E2E preflight and IAM payload offline (no live requests)
+        run: |
+          node --test tests/staging/guard.unit.test.mjs
+          node --check scripts/staging-e2e/run.mjs
+          node --check tests/staging/auth-bootstrap.js
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
