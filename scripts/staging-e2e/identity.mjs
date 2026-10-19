@@ -63,6 +63,28 @@ export async function deleteSyntheticAuthUser(apiKey, idToken, fetchImpl = fetch
  * Uses a brand-new custom-token sign-in only for the strictly allowed test UID
  * and self-deletes it. No Admin SDK, user listing or Firestore access.
  */
+/**
+ * A successful accounts:signInWithCustomToken response does not contain
+ * localId in the public v1 API contract. Query the account with its own
+ * Firebase ID token before any delete request. Do not use Admin credentials.
+ */
+export async function verifySyntheticIdTokenUid({ apiKey, idToken, uid, fetchImpl = fetch }) {
+  assert.ok(SYNTHETIC_UIDS.includes(uid), 'Refusing lookup for non-test identity');
+  assert.ok(typeof idToken === 'string' && idToken.length > 50,
+    'Missing Firebase ID token for UID verification');
+  const response = await fetchImpl(
+    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' +
+      encodeURIComponent(apiKey),
+    { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken }), signal: AbortSignal.timeout(15000) },
+  );
+  const payload = await strictJson(response, 'Firebase synthetic UID lookup');
+  assert.ok(Array.isArray(payload.users) && payload.users.length === 1,
+    'Refusing cleanup without exactly one verified Firebase user');
+  assert.equal(payload.users[0]?.localId, uid,
+    'Refusing cleanup for mismatched Firebase UID');
+}
+
 export async function reconcileSyntheticAuthUser({
   apiKey, serviceAccount, oauthToken, uid, fetchImpl = fetch,
 }) {
@@ -78,9 +100,12 @@ export async function reconcileSyntheticAuthUser({
       signal: AbortSignal.timeout(15000) },
   );
   const identity = await strictJson(response, 'Firebase synthetic UID reconciliation');
-  assert.equal(identity.localId, uid, 'Refusing cleanup for mismatched Firebase UID');
+  // accounts:signInWithCustomToken does NOT return localId. Inspect the user
+  // through Firebase's accounts:lookup using the freshly issued ID token.
+  // Never delete a user without verifying the account UID server-side.
   assert.ok(typeof identity.idToken === 'string' && identity.idToken.length > 50,
     'Missing test Firebase ID token');
+  await verifySyntheticIdTokenUid({ apiKey, idToken: identity.idToken, uid, fetchImpl });
   await deleteSyntheticAuthUser(apiKey, identity.idToken, fetchImpl);
 }
 
