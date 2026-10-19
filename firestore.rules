@@ -83,12 +83,12 @@ service cloud.firestore {
     match /users/{uid}/quotas/{kind} {
       allow get: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents'];
       allow list: if false;
-      allow create: if isOwnUser(uid) && kind in ['rooms', 'invites']
+      allow create: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents']
         && quotaValid(request.resource.data)
         && request.resource.data.count == 1
         && request.resource.data.windowStart == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if isOwnUser(uid) && kind in ['rooms', 'invites']
+      allow update: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents']
         && quotaValid(resource.data) && quotaValid(request.resource.data)
         && request.resource.data.updatedAt == request.time
         && quotaProgress(resource.data, request.resource.data,
