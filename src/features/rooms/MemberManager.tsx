@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
+import { confirmAction, showError, showSuccess } from '../../lib/alerts';
 import type { OwnedRoom } from '../../services/rooms';
 import { listRoomMembers, removeRoomMember, type RoomMember } from '../../services/invitations';
 
@@ -7,32 +8,31 @@ export default function MemberManager({ user, rooms }: { user: User; rooms: Owne
   const [roomId, setRoomId] = useState('');
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
 
-  useEffect(() => { setRoomId(''); setMembers([]); setNotice(''); }, [user.uid]);
+  useEffect(() => { setRoomId(''); setMembers([]); }, [user.uid]);
 
   const load = async (id: string) => {
     setRoomId(id);
     setMembers([]);
-    setNotice('');
     if (!id) return;
     setBusy(true);
     try {
       setMembers(await listRoomMembers(user, id));
     } catch {
-      setNotice('โหลดรายชื่อสมาชิกไม่สำเร็จ');
+      showError('โหลดรายชื่อสมาชิกไม่สำเร็จ');
     } finally { setBusy(false); }
   };
 
   const remove = async (uid: string) => {
     if (!roomId || busy || uid === user.uid) return;
+    if (!await confirmAction({ title: 'เพิกถอนสิทธิ์สมาชิก?', text: `Member ${uid.slice(0, 8)}… จะไม่สามารถเข้าถึงห้องนี้ได้`, confirmText: 'ลบสมาชิก' })) return;
     setBusy(true);
     try {
       await removeRoomMember(user, roomId, uid);
       setMembers((items) => items.filter((item) => item.uid !== uid));
-      setNotice('เพิกถอนสิทธิ์สมาชิกแล้ว');
+      showSuccess('เพิกถอนสิทธิ์สมาชิกแล้ว');
     } catch {
-      setNotice('ไม่สามารถเพิกถอนสิทธิ์สมาชิกได้');
+      showError('ไม่สามารถเพิกถอนสิทธิ์สมาชิกได้');
     } finally { setBusy(false); }
   };
 
@@ -52,7 +52,6 @@ export default function MemberManager({ user, rooms }: { user: User; rooms: Owne
             disabled={busy}>ลบสมาชิก</button>}
         </li>,
       )}</ul>}
-      {notice && <p role="status">{notice}</p>}
     </div>
   );
 }

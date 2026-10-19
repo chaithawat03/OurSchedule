@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { confirmAction, showError, showSuccess } from '../../lib/alerts';
 import type { User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import type { OwnedRoom } from '../../services/rooms';
@@ -29,13 +30,11 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
   const [joinedRoom, setJoinedRoom] = useState('');
   const [joinedRoomId, setJoinedRoomId] = useState('');
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState('');
 
   useEffect(() => {
     setIssued('');
     setJoinedRoom('');
     setJoinedRoomId('');
-    setMessage('');
   }, [user.uid]);
 
   const issue = async (event: FormEvent<HTMLFormElement>) => {
@@ -46,9 +45,9 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
     try {
       const token = await createRoomInvite(user, roomId);
       setIssued(token);
-      setMessage('สร้างคำเชิญแล้ว ลิงก์นี้ใช้ได้ครั้งเดียวและหมดอายุภายใน 48 ชั่วโมง');
+      showSuccess('สร้างคำเชิญแล้ว · ใช้ได้ครั้งเดียวภายใน 48 ชั่วโมง');
     } catch {
-      setMessage('สร้างคำเชิญไม่สำเร็จ โปรดตรวจสอบว่าคุณเป็นเจ้าของห้อง');
+      showError('สร้างคำเชิญไม่สำเร็จ โปรดตรวจสอบว่าคุณเป็นเจ้าของห้อง');
     } finally {
       setWorking(false);
     }
@@ -75,9 +74,9 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
       if (inviteFromHash(window.location.hash) === token) {
         history.replaceState(null, '', window.location.pathname + window.location.search);
       }
-      setMessage('เข้าร่วมห้องสำเร็จ');
+      showSuccess('เข้าร่วมห้องสำเร็จ');
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : 'รับคำเชิญไม่สำเร็จ');
+      showError(error instanceof Error ? error.message : 'รับคำเชิญไม่สำเร็จ');
     } finally {
       setWorking(false);
     }
@@ -85,13 +84,14 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
 
   const revoke = async () => {
     if (!issued || working) return;
+    if (!await confirmAction({ title: 'ยกเลิกลิงก์คำเชิญนี้?', text: 'ผู้ถือครองลิงก์จะไม่สามารถใช้เข้าร่วมห้องได้', confirmText: 'ยกเลิกคำเชิญ' })) return;
     setWorking(true);
     try {
       await revokeRoomInvite(user, issued);
       setIssued('');
-      setMessage('ยกเลิกคำเชิญแล้ว');
+      showSuccess('ยกเลิกคำเชิญแล้ว');
     } catch {
-      setMessage('ยกเลิกคำเชิญไม่สำเร็จ (อาจถูกใช้ไปแล้ว)');
+      showError('ยกเลิกคำเชิญไม่สำเร็จ (อาจถูกใช้ไปแล้ว)');
     } finally {
       setWorking(false);
     }
@@ -100,14 +100,15 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
 
   const leaveJoinedRoom = async () => {
     if (!joinedRoomId || working) return;
+    if (!await confirmAction({ title: 'ออกจากห้องนี้หรือไม่?', text: 'คุณจะเสียสิทธิ์เข้าถึงข้อมูลห้องนี้', confirmText: 'ออกจากห้อง' })) return;
     setWorking(true);
     try {
       await leaveRoom(user, joinedRoomId);
       setJoinedRoom('');
       setJoinedRoomId('');
-      setMessage('ออกจากห้องแล้ว');
+      showSuccess('ออกจากห้องแล้ว');
     } catch {
-      setMessage('ออกจากห้องไม่สำเร็จ');
+      showError('ออกจากห้องไม่สำเร็จ');
     } finally { setWorking(false); }
   };
 
@@ -138,7 +139,6 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
       </form>
       {joinedRoom && <div><p className="invite-status">คุณเข้าร่วม: {joinedRoom}</p>
         <button type="button" onClick={() => void leaveJoinedRoom()} disabled={working}>ออกจากห้องนี้</button></div>}
-      {message && <p role="status" className="invite-status">{message}</p>}
     </div>
   );
 }

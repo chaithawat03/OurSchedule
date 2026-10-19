@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
+import { showError, showSuccess } from '../../lib/alerts';
 import { createOwnedRoom, listOwnedRooms, type OwnedRoom } from '../../services/rooms';
 import InvitationPanel from './InvitationPanel';
 import JoinedRooms from './JoinedRooms';
@@ -39,8 +40,9 @@ export default function RoomPanel({ user }: { user: User | null }) {
       await createOwnedRoom(user, name);
       setName('');
       setRefresh((value) => value + 1);
+      showSuccess('สร้างห้องเรียบร้อยแล้ว');
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'ไม่สามารถสร้างห้องได้');
+      showError(reason instanceof Error ? reason.message : 'ไม่สามารถสร้างห้องได้');
     } finally {
       setSaving(false);
     }

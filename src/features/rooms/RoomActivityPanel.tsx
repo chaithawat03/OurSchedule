@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { User } from 'firebase/auth';
+import { confirmAction, showError, showSuccess } from '../../lib/alerts';
 import { bangkokInstant, bangkokLocal, validateActivity } from '../../lib/activityDates';
 import { listRoomMembers, type RoomMember } from '../../services/invitations';
 import type { OwnedRoom } from '../../services/rooms';
@@ -26,7 +27,6 @@ export default function RoomActivityPanel({ user, rooms }: {
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
 
   const selectedRoom = rooms.find((r) => r.id === roomId);
   const recipients = members.filter((m) => m.role === 'member' && m.uid !== user.uid);
@@ -59,12 +59,12 @@ export default function RoomActivityPanel({ user, rooms }: {
 
   const execute = async (fn: () => Promise<unknown>, success: string) => {
     if (busy) return;
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setError('');
     try {
       await fn();
-      setNotice(success); setRefresh((n) => n + 1);
+      showSuccess(success); setRefresh((n) => n + 1);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'ไม่สามารถดำเนินการได้');
+      showError(reason instanceof Error ? reason.message : 'ไม่สามารถดำเนินการได้');
     } finally { setBusy(false); }
   };
 
@@ -96,7 +96,6 @@ export default function RoomActivityPanel({ user, rooms }: {
         </div><span className="private-chip">PRIVATE</span>
       </div>
       {error && <p role="alert" className="room-error">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
       {rooms.length > 0 && <form className="personal-form" onSubmit={create}>
         <label>ห้องที่ต้องการมอบหมาย
           <select value={roomId} onChange={(e) => { setRoomId(e.target.value); setRecipientUid(''); }}
@@ -153,9 +152,11 @@ export default function RoomActivityPanel({ user, rooms }: {
           </div>
           {activity.status === 'active' && <button type="button" disabled={busy}
             onClick={() => {
-              if (window.confirm('ยกเลิกกิจกรรมที่มอบหมายนี้หรือไม่?')) {
-                void execute(() => cancelRoomActivity(user, activity.roomId, activity.id), 'ยกเลิกกิจกรรมแล้ว');
-              }
+              void (async () => {
+                if (await confirmAction({ title: 'ยกเลิกกิจกรรมที่มอบหมาย?', text: 'Member จะไม่สามารถดูรายละเอียดกิจกรรมนี้ได้อีก', confirmText: 'ยกเลิกกิจกรรม' })) {
+                  await execute(() => cancelRoomActivity(user, activity.roomId, activity.id), 'ยกเลิกกิจกรรมแล้ว');
+                }
+              })();
             }}>ยกเลิก</button>}
         </li>)}</ul>
       </div>}
