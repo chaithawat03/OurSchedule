@@ -5,7 +5,7 @@
 import { FirebaseError } from 'firebase/app';
 import { signInAnonymously } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, limit, query, serverTimestamp,
+  collection, collectionGroup, doc, getDoc, getDocs, limit, query, serverTimestamp,
   updateDoc, where,
 } from 'firebase/firestore';
 import { firebaseClient } from '../services/firebaseClient';
@@ -21,7 +21,7 @@ interface TestBridge {
   readRoom(roomId: string): Promise<ReadOutcome>;
   listEvents(roomId: string): Promise<ReadOutcome>;
   reaccept(eventId: string): Promise<WriteOutcome>;
-  joinedRoomCount(): Promise<number>;
+  joinedMemberCount(): Promise<number>;
 }
 declare global {
   interface Window { __ourscheduleE2e?: TestBridge }
@@ -95,12 +95,15 @@ export function installE2eBridge() {
         throw error;
       }
     },
-    async joinedRoomCount() {
+    async joinedMemberCount() {
       const { db, uid } = requireClient();
       const entries = await getDocs(query(
-        collection(db, 'rooms'), where('ownerUid', '==', uid), limit(20),
+        collectionGroup(db, 'members'),
+        where('uid', '==', uid),
+        where('role', '==', 'member'),
+        where('membershipState', '==', 'active'), limit(20),
       ));
-      return entries.size; // Used for Owner room creation checks only.
+      return entries.size;
     },
   };
 }
