@@ -1,0 +1,44 @@
+name: Emulator E2E
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install exact locked packages
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Verify all E2E requests target a demo project
+        run: node scripts/verify-e2e-boundary.mjs
+      - name: Owner and recipient two-UID UI + Security Rules acceptance
+        run: npm run test:e2e
+      - name: Publish troubleshooting artifacts on failure only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-e2e-failure
+          path: |
+            playwright-report/
+            test-results/e2e/
+          retention-days: 3
+          if-no-files-found: ignore
