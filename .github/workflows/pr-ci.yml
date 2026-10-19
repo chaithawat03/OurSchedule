@@ -58,6 +58,12 @@ jobs:
           node --test tests/staging/*.unit.test.mjs
           node --check scripts/staging-e2e/run.mjs
           node --check tests/staging/auth-bootstrap.js
+      - name: Offline Phase 2b preview and scoped cleanup safety tests (no cloud)
+        run: |
+          node --test tests/staging/phase2b.unit.test.mjs
+          node --check scripts/staging-e2e/phase2b/run.mjs
+          node --check scripts/staging-e2e/phase2b/cleanup.mjs
+          node --check tests/staging/phase2b-auth-bootstrap.js
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
