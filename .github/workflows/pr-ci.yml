@@ -49,6 +49,10 @@ jobs:
         run: node --check scripts/staging-m2-live-acceptance.mjs
       - name: Offline tests for safe REST write builders (no staging credentials)
         run: node --test tests/tools/m2-live-payloads.test.mjs
+      - name: Check M3.2a attended live script syntax (never execute against staging in CI)
+        run: node --check scripts/staging-m3-2a-live-acceptance.mjs
+      - name: Offline tests of M3.2a recipient REST request builders
+        run: node --test tests/tools/m3-room-live-payloads.test.mjs
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
