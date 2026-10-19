@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
+import { includeQuota } from './quotaHelpers.mjs';
 import { before, after, describe, it } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection, deleteDoc, doc, getDoc, getDocs, limit, query,
-  serverTimestamp, setDoc, Timestamp, updateDoc, where,
+  serverTimestamp, setDoc, Timestamp, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 
 let environment;
@@ -27,10 +28,42 @@ const event = (uid, extra = {}) => ({
 });
 const path = (uid, id) => 'users/' + uid + '/personalEvents/' + id;
 
+async function createValid(uid, id) {
+  const db = userDb(uid);
+  const batch = writeBatch(db);
+  await includeQuota(batch, db, uid, 'personalEvents', id);
+  batch.set(doc(db, path(uid, id)), event(uid));
+  await assertSucceeds(batch.commit());
+  return doc(db, path(uid, id));
+}
+
+
 describe('M3.1 personal private activity Security Rules', () => {
+
+  it('prevents unmetered creation and one-counter-for-two-events bypass', async () => {
+    const uid = 'event-quota-missing';
+    const db = userDb(uid);
+    await assertFails(setDoc(doc(db, path(uid, 'unmetered')), event(uid)));
+    const batch = writeBatch(db);
+    await includeQuota(batch, db, uid, 'personalEvents', 'event-paid');
+    batch.set(doc(db, path(uid, 'event-paid')), event(uid));
+    batch.set(doc(db, path(uid, 'event-unpaid')), event(uid));
+    await assertFails(batch.commit());
+  });
+
+  it('enforces 20 new personal events in one 24-hour quota window', async () => {
+    const uid = 'event-quota-cap';
+    const db = userDb(uid);
+    for (let i = 0; i < 20; i++) await createValid(uid, 'activity-' + i);
+    const batch = writeBatch(db);
+    await includeQuota(batch, db, uid, 'personalEvents', 'activity-21');
+    batch.set(doc(db, path(uid, 'activity-21')), event(uid));
+    await assertFails(batch.commit());
+  });
+
   it('allows owner to create/read only own scoped events', async () => {
     const db = userDb('activity-owner');
-    await assertSucceeds(setDoc(doc(db, path('activity-owner', 'activity-1')), event('activity-owner')));
+    await createValid('activity-owner', 'activity-1');
     const snapshot = await assertSucceeds(getDoc(doc(db, path('activity-owner', 'activity-1'))));
     if (snapshot.data()?.visibility !== 'PRIVATE') throw new Error('Private event missing');
     const result = await assertSucceeds(getDocs(query(collection(db, 'users/activity-owner/personalEvents'),
@@ -40,7 +73,7 @@ describe('M3.1 personal private activity Security Rules', () => {
 
   it('denies anonymous, cross-UID, and forged Admin/Owner access', async () => {
     const uid = 'activity-protected';
-    await assertSucceeds(setDoc(doc(userDb(uid), path(uid, 'a')), event(uid)));
+    await createValid(uid, 'a');
     const attacker = environment.authenticatedContext('evil', { role: 'owner', admin: true }).firestore();
     const anonymous = environment.unauthenticatedContext().firestore();
     for (const bad of [attacker, anonymous]) {
@@ -80,7 +113,7 @@ describe('M3.1 personal private activity Security Rules', () => {
     const uid = 'activity-editor';
     const db = userDb(uid);
     const ref = doc(db, path(uid, 'edit'));
-    await assertSucceeds(setDoc(ref, event(uid)));
+    await createValid(uid, 'edit');
     await assertSucceeds(updateDoc(ref, { title: 'Edited', notes: 'Private notes', updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(ref, { creatorUid: 'other', updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(ref, { ownerUid: 'other', updatedAt: serverTimestamp() }));
@@ -94,7 +127,7 @@ describe('M3.1 personal private activity Security Rules', () => {
     const uid = 'activity-cancelled';
     const db = userDb(uid);
     const ref = doc(db, path(uid, 'cancel'));
-    await assertSucceeds(setDoc(ref, event(uid)));
+    await createValid(uid, 'cancel');
     await assertFails(updateDoc(ref, {
       status: 'cancelled', title: 'sneaky edit', updatedAt: serverTimestamp(),
     }));

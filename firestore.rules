@@ -54,7 +54,7 @@ service cloud.firestore {
     function quotaValid(data) {
       return data.keys().hasAll(['count', 'windowStart', 'updatedAt', 'lastResourceId'])
         && data.keys().hasOnly(['count', 'windowStart', 'updatedAt', 'lastResourceId'])
-        && data.count is int && data.count >= 1 && data.count <= 10
+        && data.count is int && data.count >= 1 && data.count <= 20
         && data.windowStart is timestamp && data.updatedAt is timestamp
         && data.lastResourceId is string && data.lastResourceId.size() > 0
         && data.lastResourceId.size() <= 120;
@@ -81,7 +81,7 @@ service cloud.firestore {
     // The counter may be incremented without creating the resource (self-DoS),
     // but no resource can be created without a *fresh* matching counter step.
     match /users/{uid}/quotas/{kind} {
-      allow get: if isOwnUser(uid) && kind in ['rooms', 'invites'];
+      allow get: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents'];
       allow list: if false;
       allow create: if isOwnUser(uid) && kind in ['rooms', 'invites']
         && quotaValid(request.resource.data)
@@ -92,7 +92,7 @@ service cloud.firestore {
         && quotaValid(resource.data) && quotaValid(request.resource.data)
         && request.resource.data.updatedAt == request.time
         && quotaProgress(resource.data, request.resource.data,
-             kind == 'rooms' ? 3 : 10);
+             kind == 'rooms' ? 3 : (kind == 'invites' ? 10 : 20));
       allow delete: if false;
     }
 
@@ -305,7 +305,8 @@ service cloud.firestore {
         && personalFieldsValid(request.resource.data, uid)
         && request.resource.data.status == 'active'
         && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time;
+        && request.resource.data.updatedAt == request.time
+        && quotaConsumed(uid, 'personalEvents', eventId, 20);
       allow update: if isOwnUser(uid)
         && personalFieldsValid(request.resource.data, uid)
         && resource.data.status == 'active'

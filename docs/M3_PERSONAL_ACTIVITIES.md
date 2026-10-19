@@ -21,3 +21,8 @@ Use timezone-aware Bangkok civil time with explicit +07:00, not device timezone.
 - Desktop/iPhone/Android live: Google login; create private event, refresh persistence, edit, one-way cancel, date navigation, all-day and overnight rendering; Firestore separate UID must not read or write event. Recheck M2 room and member permissions after Rules change.
 - M3.2 room activity privacy decision: content must be separate from ROOM/BUSY_ONLY projections; no field-level redaction in Firestore, and no client grant for shared/private content before acceptance invariants are tested.
 - Remain on staging, keep Anonymous provider **Disabled**, and Production untouched until explicitly approved.
+
+
+## Transactional creation-rate guard
+
+At most **20 newly created personal events per Firebase UID per rolling 24-hour window**. Each create atomically increments the `users/{uid}/quotas/personalEvents` counter via `getAfter` and `lastResourceId`, like the M2 room/invite guard. Modified browsers cannot create multiple events with one quota transition. Edits/cancellations do not consume quota. This is a per-UID cost protection, **not** a defense against multi-account abuse. Client rate-limit errors show as a Thai validation message. Emulator tests cover cap and unmetered/duplicate resource attacks.

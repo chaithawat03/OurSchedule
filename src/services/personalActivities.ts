@@ -1,10 +1,11 @@
 import type { User } from 'firebase/auth';
 import {
-  addDoc, collection, doc, getDocs, limit, query, serverTimestamp,
+  collection, doc, getDocs, limit, query, runTransaction, serverTimestamp,
   Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
 import { monthReadWindow, validateActivity } from '../lib/activityDates';
+import { consumeQuota } from './quota';
 
 export interface PersonalActivity {
   id: string;
@@ -70,10 +71,17 @@ export async function savePersonalActivity(user: User, input: PersonalActivityIn
     if (!firebaseClient) throw new Error('Firebase ยังไม่พร้อม');
     await updateDoc(doc(firebaseClient.db, 'users', user.uid, 'personalEvents', id), base);
   } else {
-    await addDoc(personalCollection(user), {
-      ...base, ownerUid: user.uid, creatorUid: user.uid,
-      timezone: 'Asia/Bangkok', visibility: 'PRIVATE', status: 'active',
-      createdAt: serverTimestamp(),
+    if (!firebaseClient) throw new Error('Firebase ยังไม่พร้อม');
+    const db = firebaseClient.db;
+    const activityRef = doc(personalCollection(user));
+    await runTransaction(db, async (transaction) => {
+      const quota = await consumeQuota(transaction, db, user.uid, 'personalEvents', activityRef.id);
+      transaction.set(quota.ref, quota.next);
+      transaction.set(activityRef, {
+        ...base, ownerUid: user.uid, creatorUid: user.uid,
+        timezone: 'Asia/Bangkok', visibility: 'PRIVATE', status: 'active',
+        createdAt: serverTimestamp(),
+      });
     });
   }
 }
