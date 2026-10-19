@@ -71,7 +71,7 @@ describe('M3.2a per-member PRIVATE room activity offer', () => {
     const owner = db('a-atomic');
     await assertFails(setDoc(eventRef(owner, 'r-atomic', 'lonely'), eventData('r-atomic', 'a-atomic', 'b-atomic')));
     const forged = writeBatch(owner);
-    await includeQuota(forged, owner, 'roomEvents', 'r-atomic_wrong');
+    await includeQuota(forged, owner, 'a-atomic', 'roomEvents', 'r-atomic_wrong');
     forged.set(eventRef(owner, 'r-atomic', 'wrong'), eventData('r-atomic', 'a-atomic', 'b-atomic'));
     await assertFails(forged.commit());
     await assertFails(setDoc(inboxRef(owner, 'b-atomic', 'fake'),
