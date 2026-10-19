@@ -41,7 +41,6 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
     event.preventDefault();
     if (working || !rooms.some((room) => room.id === roomId)) return;
     setWorking(true);
-    setMessage('');
     try {
       const token = await createRoomInvite(user, roomId);
       setIssued(token);
@@ -57,7 +56,6 @@ export default function InvitationPanel({ user, rooms, onJoined }: { user: User;
     event.preventDefault();
     if (working) return;
     setWorking(true);
-    setMessage('');
     try {
       const token = decodeInput(input);
       const summary = await inspectRoomInvite(user, token);

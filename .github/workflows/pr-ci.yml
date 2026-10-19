@@ -55,6 +55,8 @@ jobs:
         run: bash -n scripts/release-m3-2a-staging.sh
       - name: Validate joined-room composite index configuration
         run: node scripts/check-m2-index.mjs
+      - name: Prevent native browser alert, confirm, and prompt regressions
+        run: node scripts/check-native-dialogs.mjs
       - name: Lint
         run: npm run lint
       - name: Typecheck

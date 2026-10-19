@@ -21,7 +21,6 @@ export default function JoinedRooms({ user, refreshKey }: { user: User; refreshK
     if (working) return;
     if (!await confirmAction({ title: 'ต้องการออกจากห้อง?', text: 'สิทธิ์เข้าถึงห้องและกิจกรรมจะถูกเพิกถอน', confirmText: 'ออกจากห้อง' })) return;
     setWorking(true);
-    setMessage('');
     try {
       await leaveRoom(user, roomId);
       setRooms((previous) => previous.filter((room) => room.id !== roomId));
