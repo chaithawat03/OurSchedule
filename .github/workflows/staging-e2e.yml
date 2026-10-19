@@ -1,0 +1,56 @@
+name: Staging E2E (opt-in)
+
+# No PR triggers: never grant OIDC to untrusted branches or PR code.
+# Scheduled runs are SKIPPED unless explicitly enabled via repository variables.
+on:
+  schedule:
+    - cron: '17 21 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ourschedule-staging-live-e2e
+  cancel-in-progress: false
+
+jobs:
+  staging-read-isolation:
+    if: >-
+      github.repository == 'chaithawat03/OurSchedule' &&
+      github.ref == 'refs/heads/main' &&
+      vars.STAGING_E2E_ENABLED == 'true' &&
+      vars.STAGING_E2E_APPROVE_PERSISTENT_PROFILES == 'true'
+    environment: staging-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install exact locked packages
+        run: npm ci --no-audit --no-fund
+      - name: Install browser for isolated test contexts
+        run: npx playwright install --with-deps chromium
+      - name: Exchange GitHub OIDC for short-lived Google access token
+        id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.STAGING_E2E_WIF_PROVIDER }}
+          service_account: ${{ vars.STAGING_E2E_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Two synthetic browser users and actual live Rules denials
+        env:
+          STAGING_E2E_ENABLED: ${{ vars.STAGING_E2E_ENABLED }}
+          STAGING_E2E_APPROVE_PERSISTENT_PROFILES: ${{ vars.STAGING_E2E_APPROVE_PERSISTENT_PROFILES }}
+          STAGING_E2E_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+          STAGING_E2E_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+          STAGING_E2E_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_SERVICE_ACCOUNT }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: node scripts/staging-e2e/run.mjs
