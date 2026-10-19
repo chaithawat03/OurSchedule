@@ -279,7 +279,51 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // All personal events, projections and unapproved collections remain closed.
+
+    // M3.1 private personal events; room owners and admins have NO grant here.
+    function personalFieldsValid(data, uid) {
+      return data.keys().hasAll(['ownerUid','creatorUid','title','notes','startAt',
+          'endAt','allDay','timezone','visibility','status','createdAt','updatedAt'])
+        && data.keys().hasOnly(['ownerUid','creatorUid','title','notes','startAt',
+          'endAt','allDay','timezone','visibility','status','createdAt','updatedAt'])
+        && data.ownerUid == uid && data.creatorUid == uid
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 360
+        && data.notes is string && data.notes.size() <= 2000
+        && data.startAt is timestamp && data.endAt is timestamp
+        && data.endAt > data.startAt
+        && data.endAt <= data.startAt + duration.value(1, 'd')
+        && data.allDay is bool && data.timezone == 'Asia/Bangkok'
+        && data.visibility == 'PRIVATE' && data.status in ['active','cancelled']
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    match /users/{uid}/personalEvents/{eventId} {
+      allow get: if isOwnUser(uid);
+      allow list: if isOwnUser(uid)
+        && request.query.limit != null && request.query.limit <= 100;
+      allow create: if isOwnUser(uid)
+        && personalFieldsValid(request.resource.data, uid)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isOwnUser(uid)
+        && personalFieldsValid(request.resource.data, uid)
+        && resource.data.status == 'active'
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.creatorUid == resource.data.creatorUid
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title','notes','startAt','endAt','allDay','updatedAt','status'])
+        && (request.resource.data.status == 'active'
+          || (request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+              ['status','updatedAt'])));
+      allow delete: if false;
+      match /{nested=**} { allow read, write: if false; }
+    }
+
+    // All room-shared events and projections remain closed.
     match /{document=**} {
       allow read, write: if false;
     }

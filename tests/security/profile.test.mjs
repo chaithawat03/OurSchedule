@@ -73,7 +73,7 @@ describe('M1 user profile privacy', () => {
     await assertFails(deleteDoc(doc(db, 'users/list-owner')));
   });
 
-  it('never allows personal event access even as owner', async () => {
+  it('denies unbounded personal event listing and malformed creation', async () => {
     const db = environment.authenticatedContext('calendar-owner').firestore();
     await assertFails(getDocs(collection(db, 'users/calendar-owner/personalEvents')));
     await assertFails(setDoc(doc(db, 'users/calendar-owner/personalEvents/a'), { title: 'Private' }));
