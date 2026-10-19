@@ -65,7 +65,7 @@ export interface JoinedRoom {
 export async function listJoinedRooms(user: User): Promise<JoinedRoom[]> {
   const db = dbForUser(user);
   // Firestore Rules authorize only the UID's own active membership docs.
-  // The collection-group single-field index is declared in firestore.indexes.json.
+  // The composite collection-group index is declared in firestore.indexes.json.
   const memberships = await getDocs(query(
     collectionGroup(db, 'members'),
     where('uid', '==', user.uid),

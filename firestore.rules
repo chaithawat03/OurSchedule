@@ -81,14 +81,14 @@ service cloud.firestore {
     // The counter may be incremented without creating the resource (self-DoS),
     // but no resource can be created without a *fresh* matching counter step.
     match /users/{uid}/quotas/{kind} {
-      allow get: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents'];
+      allow get: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents', 'roomEvents'];
       allow list: if false;
-      allow create: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents']
+      allow create: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents', 'roomEvents']
         && quotaValid(request.resource.data)
         && request.resource.data.count == 1
         && request.resource.data.windowStart == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents']
+      allow update: if isOwnUser(uid) && kind in ['rooms', 'invites', 'personalEvents', 'roomEvents']
         && quotaValid(resource.data) && quotaValid(request.resource.data)
         && request.resource.data.updatedAt == request.time
         && quotaProgress(resource.data, request.resource.data,
@@ -324,7 +324,178 @@ service cloud.firestore {
       match /{nested=**} { allow read, write: if false; }
     }
 
-    // All room-shared events and projections remain closed.
+
+    // M3.2a: one direct recipient per room activity. PRIVATE is a strict
+    // unshared envelope; a deliberate recipient inbox is not a room-wide feed.
+    // ROOM / BUSY_ONLY projections remain DENIED until M3.2b privacy review.
+    function roomEventPath(roomId, eventId) {
+      return /databases/$(database)/documents/rooms/$(roomId)/events/$(eventId);
+    }
+
+    function roomAssignmentPath(uid, eventId) {
+      return /databases/$(database)/documents/users/$(uid)/roomActivityInvites/$(eventId);
+    }
+
+    function eligibleRecipient(roomId, uid, issuedAt) {
+      let memberPath = /databases/$(database)/documents/rooms/$(roomId)/members/$(uid);
+      return signedIn() && exists(memberPath)
+        && get(memberPath).data.uid == uid
+        && get(memberPath).data.role == 'member'
+        && get(memberPath).data.membershipState == 'active'
+        && get(memberPath).data.joinedAt <= issuedAt;
+    }
+
+    function roomEventValid(event, roomId) {
+      return event.keys().hasAll([
+          'roomId','creatorUid','recipientUid','title','notes',
+          'startAt','endAt','allDay','timezone','visibility','status',
+          'createdAt','updatedAt'
+        ])
+        && event.keys().hasOnly([
+          'roomId','creatorUid','recipientUid','title','notes',
+          'startAt','endAt','allDay','timezone','visibility','status',
+          'createdAt','updatedAt'
+        ])
+        && event.roomId == roomId
+        && event.creatorUid is string && event.creatorUid.size() > 0
+        && event.recipientUid is string && event.recipientUid.size() > 0
+        && event.creatorUid != event.recipientUid
+        && event.title is string && event.title.size() > 0 && event.title.size() <= 360
+        && event.notes is string && event.notes.size() <= 2000
+        && event.startAt is timestamp && event.endAt is timestamp
+        && event.endAt > event.startAt
+        && event.endAt <= event.startAt + duration.value(1, 'd')
+        && event.allDay is bool && event.timezone == 'Asia/Bangkok'
+        && event.visibility == 'PRIVATE'
+        && event.status in ['active','cancelled']
+        && event.createdAt is timestamp && event.updatedAt is timestamp;
+    }
+
+    function roomInboxValid(inbox, recipientUid, eventId) {
+      return inbox.keys().hasAll([
+          'roomId','eventId','creatorUid','recipientUid','title',
+          'startAt','endAt','state','createdAt','updatedAt'
+        ])
+        && inbox.keys().hasOnly([
+          'roomId','eventId','creatorUid','recipientUid','title',
+          'startAt','endAt','state','createdAt','updatedAt'
+        ])
+        && inbox.roomId is string && inbox.roomId.size() > 0
+        && inbox.eventId == eventId
+        && inbox.recipientUid == recipientUid
+        && inbox.creatorUid is string && inbox.creatorUid.size() > 0
+        && inbox.title is string && inbox.title.size() > 0 && inbox.title.size() <= 360
+        && inbox.startAt is timestamp && inbox.endAt is timestamp
+        && inbox.endAt > inbox.startAt
+        && inbox.state in ['PENDING','ACCEPTED','DECLINED']
+        && inbox.createdAt is timestamp && inbox.updatedAt is timestamp;
+    }
+
+    function inboxStartsFromSameEvent(inbox, recipientUid, eventId) {
+      let event = getAfter(roomEventPath(inbox.roomId, eventId)).data;
+      let room = get(/databases/$(database)/documents/rooms/$(inbox.roomId)).data;
+      return signedIn() && inbox.creatorUid == request.auth.uid
+        && room.ownerUid == request.auth.uid
+        && event.creatorUid == request.auth.uid
+        && event.recipientUid == recipientUid
+        && event.roomId == inbox.roomId
+        && event.title == inbox.title
+        && event.startAt == inbox.startAt && event.endAt == inbox.endAt
+        && event.status == 'active' && event.visibility == 'PRIVATE'
+        && event.createdAt == request.time && event.updatedAt == request.time
+        && inbox.state == (room.assignmentPolicy == 'AUTO_ASSIGN' ? 'ACCEPTED' : 'PENDING')
+        && eligibleRecipient(inbox.roomId, recipientUid, request.time);
+    }
+
+    function creatorEventCreation(roomId, eventId, event) {
+      let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
+      let inbox = getAfter(roomAssignmentPath(event.recipientUid, eventId)).data;
+      return signedIn()
+        && room.ownerUid == request.auth.uid
+        && event.creatorUid == request.auth.uid
+        && eligibleRecipient(roomId, event.recipientUid, request.time)
+        && quotaConsumed(request.auth.uid, 'roomEvents', roomId + '_' + eventId, 20)
+        && inbox.roomId == roomId && inbox.eventId == eventId
+        && inbox.creatorUid == event.creatorUid
+        && inbox.recipientUid == event.recipientUid
+        && inbox.title == event.title
+        && inbox.startAt == event.startAt && inbox.endAt == event.endAt
+        && inbox.createdAt == request.time && inbox.updatedAt == request.time
+        && inbox.state == (room.assignmentPolicy == 'AUTO_ASSIGN' ? 'ACCEPTED' : 'PENDING');
+    }
+
+    function canReadAssignedRoomEvent(roomId, eventId, event) {
+      let inboxPath = roomAssignmentPath(request.auth.uid, eventId);
+      return signedIn() && event.recipientUid == request.auth.uid
+        && event.status == 'active'
+        && exists(inboxPath)
+        && get(inboxPath).data.roomId == roomId
+        && get(inboxPath).data.creatorUid == event.creatorUid
+        && get(inboxPath).data.state == 'ACCEPTED'
+        && eligibleRecipient(roomId, request.auth.uid, get(inboxPath).data.createdAt);
+    }
+
+    match /rooms/{roomId}/events/{eventId} {
+      allow get: if signedIn()
+        && ((resource.data.creatorUid == request.auth.uid
+             && isRoomOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid))
+          || canReadAssignedRoomEvent(roomId, eventId, resource.data));
+      allow list: if signedIn()
+        && resource.data.creatorUid == request.auth.uid
+        && isRoomOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid)
+        && request.query.limit != null && request.query.limit <= 20;
+      allow create: if signedIn()
+        && roomEventValid(request.resource.data, roomId)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && creatorEventCreation(roomId, eventId, request.resource.data);
+      // Status-only cancel; recipient cannot edit event content.
+      // Inbox remains history but no accepted participant may read cancelled event.
+      allow update: if signedIn()
+        && resource.data.creatorUid == request.auth.uid
+        && isRoomOwner(get(/databases/$(database)/documents/rooms/$(roomId)).data.ownerUid)
+        && roomEventValid(request.resource.data, roomId)
+        && resource.data.status == 'active'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status','updatedAt']);
+      allow delete: if false;
+      match /{nested=**} { allow read, write: if false; }
+    }
+
+    // Per-recipient inbox is not a room-visible calendar projection.
+    // It is readable to the named recipient alone, or by its creator via
+    // direct get to render assignment status (never list other users).
+    match /users/{uid}/roomActivityInvites/{eventId} {
+      allow get: if isOwnUser(uid)
+        || (signedIn() && resource.data.creatorUid == request.auth.uid
+          && isRoomOwner(get(/databases/$(database)/documents/rooms/$(resource.data.roomId)).data.ownerUid));
+      allow list: if isOwnUser(uid)
+        && request.query.limit != null && request.query.limit <= 20;
+      allow create: if signedIn()
+        && roomInboxValid(request.resource.data, uid, eventId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && inboxStartsFromSameEvent(request.resource.data, uid, eventId);
+      allow update: if isOwnUser(uid)
+        && roomInboxValid(request.resource.data, uid, eventId)
+        && resource.data.state == 'PENDING'
+        && request.resource.data.state in ['ACCEPTED','DECLINED']
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['state','updatedAt'])
+        && exists(roomEventPath(resource.data.roomId, eventId))
+        && get(roomEventPath(resource.data.roomId, eventId)).data.status == 'active'
+        && get(roomEventPath(resource.data.roomId, eventId)).data.recipientUid == uid
+        && eligibleRecipient(resource.data.roomId, uid, resource.data.createdAt);
+      allow delete: if false;
+      match /{nested=**} { allow read, write: if false; }
+    }
+
+    // Room-wide calendar projections remain closed until M3.2b.
     match /{document=**} {
       allow read, write: if false;
     }
