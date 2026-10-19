@@ -54,6 +54,11 @@ const p2bAllowed = import.meta.env.PROD
 if (p2bRequested && !p2bAllowed) {
   throw new Error('Refusing Phase 2b outside its named database and Hosting preview');
 }
+// The runner refuses any preview build without this live runtime assertion.
+// The normal Staging and Production builds do not set this marker.
+if (p2bRequested && p2bAllowed) {
+  document.documentElement.dataset.phase2bDatabase = 'ourschedule-e2e';
+}
 const auth = app ? getAuth(app) : null;
 const db = app
   ? (p2bRequested ? getFirestore(app, 'ourschedule-e2e') : getFirestore(app))
