@@ -1,4 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import PersonalActivityPanel from './features/activity/PersonalActivityPanel';
+import { listPersonalActivities, type PersonalActivity } from './services/personalActivities';
+import { overlapsDay } from './lib/activityDates';
 import IdentityPanel from './features/identity/IdentityPanel';
 import RoomPanel from './features/rooms/RoomPanel';
 import { useIdentity } from './features/identity/useIdentity';
@@ -8,8 +11,9 @@ type View = 'day' | 'month' | 'multi';
 const viewNames: Record<View, string> = { day: 'รายวัน', month: 'รายเดือน', multi: 'หลายเดือน' };
 const weekdays = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 
-function Month({ year, monthIndex, selected, onSelect }: {
+function Month({ year, monthIndex, selected, onSelect, events }: {
   year: number; monthIndex: number; selected: string; onSelect: (date: string) => void;
+  events: PersonalActivity[];
 }) {
   const cells = useMemo(() => monthGrid(year, monthIndex), [year, monthIndex]);
   const heading = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, monthIndex, 1)));
@@ -22,7 +26,8 @@ function Month({ year, monthIndex, selected, onSelect }: {
           type="button" key={cell.date} aria-label={cell.date} aria-pressed={selected === cell.date}
           className={'day-cell' + (cell.isCurrentMonth ? '' : ' outside') + (selected === cell.date ? ' selected' : '')}
           onClick={() => onSelect(cell.date)}
-        >{cell.day}</button>)}
+        >{cell.day}{events.some((event) => overlapsDay(event.start, event.end, cell.date)) &&
+          <span className="day-activity-count" aria-label="มีกิจกรรม">●</span>}</button>)}
       </div>
     </section>
   );
@@ -37,27 +42,47 @@ export default function App() {
     [today.year, String(today.monthIndex + 1).padStart(2, '0'), String(today.day).padStart(2, '0')].join('-'),
   );
   const dateHeading = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(selected + 'T12:00:00Z'));
-  const navigate = (offset: number) => setCursor((old) => shiftMonth(old.year, old.monthIndex, offset));
+  const navigate = (offset: number) => setCursor((old) => {
+    const next = shiftMonth(old.year, old.monthIndex, offset);
+    setSelected([next.year, String(next.monthIndex + 1).padStart(2, '0'), '01'].join('-'));
+    return next;
+  });
   const nextMonth = shiftMonth(cursor.year, cursor.monthIndex, 1);
+  const user = identity.state.status === 'ready' ? identity.state.user : null;
+  const [events, setEvents] = useState<PersonalActivity[]>([]);
+  const [eventsBusy, setEventsBusy] = useState(false);
+  const [eventsError, setEventsError] = useState('');
+  const [truncated, setTruncated] = useState(false);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!user) { setEvents([]); setEventsError(''); setTruncated(false); return; }
+    let active = true;
+    setEventsBusy(true); setEventsError('');
+    void listPersonalActivities(user, cursor.year, cursor.monthIndex, view === 'multi')
+      .then((result) => { if (active) { setEvents(result.events); setTruncated(result.truncated); } })
+      .catch(() => { if (active) { setEvents([]); setEventsError('ไม่สามารถโหลดกิจกรรมส่วนตัวได้'); } })
+      .finally(() => { if (active) setEventsBusy(false); });
+    return () => { active = false; };
+  }, [user, cursor.year, cursor.monthIndex, view, reload]);
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand"><div className="mark">OS</div><div><strong>OurSchedule</strong><small>ปฏิทินของเรา</small></div></div>
-        <span className="phase">M2 ROOM OWNERSHIP</span>
+        <span className="phase">M3 PERSONAL ACTIVITIES</span>
       </header>
       <div className="workspace">
         <aside className="sidebar">
           <p className="section-name">MY WORKSPACE</p>
           <div className="nav-current">ปฏิทินส่วนตัว</div>
           <p className="section-name room-heading">ROOMS</p>
-          <p className="aside-note">สร้างห้องส่วนตัวได้แล้ว การเชิญสมาชิกจะเปิดใน M2 ระยะถัดไป</p>
-          <div className="aside-warning">M2: ห้องที่สร้างยังเป็นส่วนตัว ไม่เปิดรับสมาชิกหรือกิจกรรมจนกว่ากฎการแชร์จะผ่านการตรวจสอบ</div>
+          <p className="aside-note">สร้างห้องและเชิญสมาชิกได้แล้ว</p>
+          <div className="aside-warning">M3.1: กิจกรรมส่วนตัวพร้อมใช้งาน กิจกรรมของห้องและการแชร์รายละเอียดจะอยู่ใน M3.2</div>
         </aside>
         <main className="content">
           <div className="heading-row">
-            <div><p className="eyebrow">CALENDAR FOUNDATION</p><h1>ตารางกิจกรรม</h1><p className="subtitle">เข้าสู่ระบบด้วย Google เพื่อใช้งานบัญชีส่วนตัว ฟังก์ชันกิจกรรมจะพัฒนาใน M3</p></div>
-            <span className="preview-pill">Preview only</span>
+            <div><p className="eyebrow">PERSONAL CALENDAR</p><h1>ตารางกิจกรรม</h1><p className="subtitle">เข้าสู่ระบบเพื่อสร้างและจัดการกิจกรรมส่วนตัว โดยไม่เปิดเผยให้สมาชิกห้อง</p></div>
+            <span className="preview-pill">M3.1 PRIVATE</span>
           </div>
           <IdentityPanel identity={identity} />
           <RoomPanel user={identity.state.status === 'ready' ? identity.state.user : null} />
@@ -73,16 +98,19 @@ export default function App() {
           </div>
           {view === 'day' ? (
             <section className="empty-state">
-              <p className="eyebrow">DAY VIEW</p><h2>{dateHeading}</h2><p>ยังไม่มีกิจกรรม ฟังก์ชันข้อมูลจริงจะเริ่มใน M3</p>
+              <p className="eyebrow">DAY VIEW</p><h2>{dateHeading}</h2><p>เลือกวันที่เพื่อดูหรือสร้างกิจกรรมด้านล่าง</p>
               <button type="button" onClick={() => setView('month')}>กลับสู่รายเดือน</button>
             </section>
           ) : (
             <div className={'calendar-layout' + (view === 'multi' ? ' multi' : '')}>
-              <Month year={cursor.year} monthIndex={cursor.monthIndex} selected={selected} onSelect={setSelected} />
-              {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={setSelected} />}
+              <Month year={cursor.year} monthIndex={cursor.monthIndex} selected={selected} onSelect={setSelected} events={events} />
+              {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={setSelected} events={events} />}
             </div>
           )}
-          <p className="footnote">● M2: โปรไฟล์และห้องที่สร้างเองเท่านั้น กิจกรรมยังไม่เปิดใช้งาน <span>·</span> {dateHeading}</p>
+          <PersonalActivityPanel key={user?.uid ?? 'signed-out'} user={user} day={selected}
+            events={events} busy={eventsBusy} error={eventsError} truncated={truncated}
+            onUpdated={() => setReload((value) => value + 1)} />
+          <p className="footnote">● M3.1: กิจกรรมส่วนตัว PRIVATE ไม่เปิดเผยให้สมาชิกห้อง <span>·</span> {dateHeading}</p>
         </main>
       </div>
     </div>
