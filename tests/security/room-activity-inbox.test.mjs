@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { before, after, describe, it } from 'node:test';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
-  collection, doc, getDoc, getDocs, limit, query, serverTimestamp,
+  collection, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp,
   setDoc, Timestamp, updateDoc, where, writeBatch, deleteDoc,
 } from 'firebase/firestore';
 import { includeQuota } from './quotaHelpers.mjs';
@@ -98,6 +98,15 @@ describe('M3.2a per-member PRIVATE room activity offer', () => {
     await assertFails(first.commit());
   });
 
+
+  it('enforces 20 room event creations per UID in the rolling quota window', async () => {
+    await seedRoom('r-cap-room', 'a-cap-room', 'b-cap-room');
+    for (let i = 0; i < 20; i++) {
+      await assertSucceeds(createPair('r-cap-room', 'a-cap-room', 'b-cap-room', 'new-' + i));
+    }
+    await assertFails(createPair('r-cap-room', 'a-cap-room', 'b-cap-room', 'new-over-limit'));
+  });
+
   it('recipient sees only direct inbox until accepting; then can read own event but not room-wide list', async () => {
     await seedRoom('r-pending', 'a-pending', 'b-pending');
     await assertSucceeds(createPair('r-pending', 'a-pending', 'b-pending', 'invite-pending'));
@@ -117,9 +126,13 @@ describe('M3.2a per-member PRIVATE room activity offer', () => {
     if (!approved.exists() || approved.data()?.notes !== 'Hidden details')
       throw new Error('Accepted member cannot see explicitly assigned activity');
     const inboxItems = await assertSucceeds(getDocs(query(
-      collection(member, 'users/b-pending/roomActivityInvites'), limit(20))));
+      collection(member, 'users/b-pending/roomActivityInvites'), orderBy('createdAt', 'desc'), limit(20))));
     if (inboxItems.size !== 1) throw new Error('Recipient inbox query mismatch');
-    const ownerReadInbox = await assertSucceeds(getDoc(inboxRef(owner, 'b-pending', 'invite-pending')));
+    const ownEvents = await assertSucceeds(getDocs(query(
+      collection(owner, 'rooms/r-pending/events'),
+      where('creatorUid', '==', 'a-pending'), limit(20))));
+    if (ownEvents.size !== 1) throw new Error('Room creator cannot list own events');
+        const ownerReadInbox = await assertSucceeds(getDoc(inboxRef(owner, 'b-pending', 'invite-pending')));
     if (ownerReadInbox.data()?.state !== 'ACCEPTED') throw new Error('Creator not seeing acceptance');
   });
 
