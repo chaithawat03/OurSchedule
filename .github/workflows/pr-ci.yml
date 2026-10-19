@@ -25,6 +25,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify patched gRPC dependency tree
         run: node scripts/check-grpc-lock.mjs
+      - name: Inspect SweetAlert2 tarball integrity metadata
+        run: npm view sweetalert2@11.26.25 dist.integrity --json
       - name: Production dependency audit (high+ gate, collect evidence)
         id: audit_prod
         continue-on-error: true
