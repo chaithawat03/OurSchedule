@@ -104,7 +104,9 @@ async function googleFetch(url, accessToken, { method = 'GET', body, fetchImpl =
   if (!response.ok) {
     throw new Error('Isolated Firestore cleanup API returned HTTP ' + response.status);
   }
-  return response.status === 204 ? {} : response.json();
+  // DELETE may return HTTP 200/204 with an empty body. Never misclassify
+  // successful deletion by attempting to parse absent JSON.
+  return method === 'DELETE' || response.status === 204 ? {} : response.json();
 }
 const apiPath = (path) =>
   path.split('/').map(part => {
@@ -123,7 +125,7 @@ async function listCollectionIds(parent, token, fetchImpl) {
 }
 
 async function listDocs(path, token, fetchImpl) {
-  const response = await googleFetch(ROOT+'/'+apiPath(path)+'?pageSize=100',token,{fetchImpl});
+  const response = await googleFetch(ROOT+'/'+apiPath(path)+'?pageSize=100&showMissing=true',token,{fetchImpl});
   assert.ok(!response.nextPageToken, 'Refusing paginated document inventory');
   const docs = response.documents ?? [];
   assert.ok(Array.isArray(docs) && docs.length <= MAX_CLEANUP_DOCS);
