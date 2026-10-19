@@ -48,7 +48,12 @@ export async function deleteSyntheticAuthUser(apiKey, idToken, fetchImpl = fetch
     { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ idToken }), signal: AbortSignal.timeout(15000) },
   );
-  await strictJson(response, 'Firebase test identity self-delete');
+  // Firebase accounts:delete succeeds with HTTP 200 and may return NO body.
+  // Parsing response.json() on an empty success body incorrectly reports a
+  // cleanup failure after the test identity has already been deleted.
+  if (!response.ok) {
+    throw new Error('Firebase test identity self-delete failed (HTTP ' + response.status + ')');
+  }
 }
 
 
