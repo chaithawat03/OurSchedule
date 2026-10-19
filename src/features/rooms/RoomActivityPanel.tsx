@@ -149,6 +149,7 @@ export default function RoomActivityPanel({ user, rooms }: {
           <div><strong>{activity.title}</strong>
             <small>{bangkokLocal(activity.start)} · Member {activity.recipientUid.slice(0, 8)}…</small>
             {activity.status === 'cancelled' && <small>ยกเลิกแล้ว</small>}
+            <small>ตอบรับ: {activity.assignmentState ?? 'ยังไม่พบสถานะ'}</small>
           </div>
           {activity.status === 'active' && <button type="button" disabled={busy}
             onClick={() => {
@@ -159,7 +160,12 @@ export default function RoomActivityPanel({ user, rooms }: {
         </li>)}</ul>
       </div>}
       <div className="room-activity-list">
-        <h3>คำเชิญกิจกรรมสำหรับฉัน (สูงสุด 20)</h3>
+        <div className="room-activity-inbox-header">
+          <h3>คำเชิญกิจกรรมสำหรับฉัน (สูงสุด 20)</h3>
+          <button type="button" disabled={busy} onClick={() => setRefresh((n) => n + 1)}>
+            โหลดคำเชิญใหม่
+          </button>
+        </div>
         {inbox.length === 0 && <p>ยังไม่มีคำเชิญกิจกรรม</p>}
         <ul>{inbox.map((item) => <li key={item.eventId}>
           <div><strong>{item.title}</strong>

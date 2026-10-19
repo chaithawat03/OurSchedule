@@ -1,6 +1,6 @@
 import type { User } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, limit, query, runTransaction,
+  collection, doc, getDoc, getDocs, limit, orderBy, query, runTransaction,
   serverTimestamp, Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
@@ -24,6 +24,7 @@ export interface RoomActivity {
   end: Date;
   recipientUid: string;
   status: 'active' | 'cancelled';
+  assignmentState: AssignmentState | null;
 }
 export interface RoomActivityInvitation {
   eventId: string;
@@ -84,23 +85,30 @@ export async function listOwnedRoomActivities(creator: User, roomId: string): Pr
     where('creatorUid', '==', creator.uid),
     limit(20),
   ));
-  return result.docs.flatMap((entry) => {
+  const events = await Promise.all(result.docs.map(async (entry) => {
     const item = entry.data();
-    if (!(item.startAt instanceof Timestamp) || !(item.endAt instanceof Timestamp)) return [];
-    return [{
+    if (!(item.startAt instanceof Timestamp) || !(item.endAt instanceof Timestamp)) return null;
+    const recipientUid = String(item.recipientUid);
+    // Creator may read just the paired inbox to show assignment status.
+    const inbox = await getDoc(doc(db, 'users', recipientUid, 'roomActivityInvites', entry.id));
+    return {
       id: entry.id, roomId,
       title: String(item.title), notes: String(item.notes),
       start: item.startAt.toDate(), end: item.endAt.toDate(),
-      recipientUid: String(item.recipientUid),
+      recipientUid,
       status: item.status as RoomActivity['status'],
-    }];
-  }).sort((a, b) => a.start.getTime() - b.start.getTime());
+      assignmentState: inbox.exists() ? inbox.data().state as AssignmentState : null,
+    };
+  }));
+  return events.filter((event): event is RoomActivity => event !== null)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
 export async function listRoomActivityInvitations(recipient: User): Promise<RoomActivityInvitation[]> {
   const db = dbFor(recipient);
   const result = await getDocs(query(
-    collection(db, 'users', recipient.uid, 'roomActivityInvites'), limit(20),
+    collection(db, 'users', recipient.uid, 'roomActivityInvites'),
+    orderBy('createdAt', 'desc'), limit(20),
   ));
   return result.docs.flatMap((entry) => {
     const item = entry.data();
@@ -139,6 +147,7 @@ export async function getAssignedPrivateRoomActivity(
     start: item.startAt.toDate(), end: item.endAt.toDate(),
     recipientUid: String(item.recipientUid),
     status: item.status as RoomActivity['status'],
+    assignmentState: 'ACCEPTED',
   };
 }
 
