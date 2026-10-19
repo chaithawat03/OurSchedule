@@ -38,8 +38,11 @@ const authApi = (name) =>
   'https://identitytoolkit.googleapis.com/v1/' + name + '?key=' + encodeURIComponent(apiKey);
 const urlFor = (suffix) => DOC_API + '/' + suffix;
 const commitUrl = DOC_API + ':commit';
-const queryUrl = (parent) => DOC_API + '/' +
-  parent.slice(DOC_ROOT.length + 1) + ':runQuery';
+const queryUrl = (parent) => {
+  if (parent === DOC_ROOT) return DOC_API + ':runQuery';
+  if (!parent.startsWith(DOC_ROOT + '/')) throw new Error('Invalid Firestore query parent');
+  return DOC_API + '/' + parent.slice(DOC_ROOT.length + 1) + ':runQuery';
+};
 
 let uid = null;
 let idToken = null;
@@ -103,7 +106,7 @@ async function readDoc(suffix) {
 const commit = (writes) =>
   request(commitUrl, 'POST', idToken, { writes });
 async function runQuery({ parent, body }) {
-  if (!parent.startsWith(DOC_ROOT + '/')) fail('Unexpected REST query parent');
+  if (parent !== DOC_ROOT && !parent.startsWith(DOC_ROOT + '/')) fail('Unexpected REST query parent');
   const response = await request(queryUrl(parent), 'POST', idToken, body);
   if (!response.ok) {
     const status = response.status;
