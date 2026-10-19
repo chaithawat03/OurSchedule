@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'vite';
 import { customTokenUnsignedPayload, mintFirebaseCustomToken,
-  rulesGetDocument } from '../../scripts/staging-e2e/identity.mjs';
+  reconcileSyntheticAuthUser, rulesGetDocument } from '../../scripts/staging-e2e/identity.mjs';
 
 test('runner-only Firebase Auth bootstrap is bundled without external chunks', async () => {
   const result = await build({
@@ -62,4 +62,79 @@ test('Firestore REST request uses the caller Firebase ID token and not privilege
   assert.equal(status, 403);
   await assert.rejects(rulesGetDocument('token', ['users', '../victim'],
     async () => ({ status: 200 })));
+});
+
+
+test('reconciliation recovers a synthetic account without an existing browser session', async () => {
+  const calls = [];
+  const uid = 'e2e_staging_member_v1';
+  await reconcileSyntheticAuthUser({
+    uid,
+    apiKey: 'synthetic-web-api-key',
+    serviceAccount: 'e2e-runner@ourschedule.iam.gserviceaccount.com',
+    oauthToken: 'synthetic-short-lived-oauth',
+    fetchImpl: async (url, init) => {
+      const operation = url.includes(':signBlob') ? 'sign' :
+        url.includes('signInWithCustomToken') ? 'signin' :
+        url.includes('accounts:delete') ? 'delete' : 'unexpected';
+      calls.push(operation);
+      if (operation === 'sign') {
+        assert.equal(init.headers.authorization, 'Bearer synthetic-short-lived-oauth');
+        return { ok: true, json: async () => ({
+          signedBlob: Buffer.from('signature').toString('base64'),
+        }) };
+      }
+      if (operation === 'signin') {
+        const body = JSON.parse(init.body);
+        assert.equal(body.returnSecureToken, true);
+        assert.equal(JSON.parse(Buffer.from(body.token.split('.')[1], 'base64url').toString()).uid, uid);
+        return { ok: true, json: async () => ({ localId: uid, idToken: 'x'.repeat(75) }) };
+      }
+      if (operation === 'delete') {
+        assert.equal(JSON.parse(init.body).idToken, 'x'.repeat(75));
+        return { ok: true, json: async () => ({}) };
+      }
+      throw new Error('Unexpected mock endpoint');
+    },
+  });
+  assert.deepEqual(calls, ['sign', 'signin', 'delete']);
+});
+
+test('cleanup refuses a mismatched UID and never calls delete', async () => {
+  const operations = [];
+  await assert.rejects(reconcileSyntheticAuthUser({
+    uid: 'e2e_staging_owner_v1',
+    apiKey: 'synthetic-web-api-key',
+    serviceAccount: 'e2e-runner@ourschedule.iam.gserviceaccount.com',
+    oauthToken: 'synthetic-short-lived-oauth',
+    fetchImpl: async (url) => {
+      if (url.includes(':signBlob')) {
+        operations.push('sign');
+        return { ok: true, json: async () => ({
+          signedBlob: Buffer.from('signature').toString('base64'),
+        }) };
+      }
+      if (url.includes('signInWithCustomToken')) {
+        operations.push('signin');
+        return { ok: true, json: async () => ({
+          localId: 'some-unrelated-person', idToken: 'x'.repeat(75),
+        }) };
+      }
+      operations.push('delete');
+      return { ok: true, json: async () => ({}) };
+    },
+  }), /mismatched Firebase UID/);
+  assert.deepEqual(operations, ['sign', 'signin']);
+});
+
+test('cleanup denies unknown user without making any HTTP call', async () => {
+  let calls = 0;
+  await assert.rejects(reconcileSyntheticAuthUser({
+    uid: 'a-real-customer',
+    apiKey: 'key',
+    serviceAccount: 'e2e-runner@ourschedule.iam.gserviceaccount.com',
+    oauthToken: 'mock',
+    fetchImpl: async () => { calls++; throw new Error('must not call'); },
+  }));
+  assert.equal(calls, 0);
 });
