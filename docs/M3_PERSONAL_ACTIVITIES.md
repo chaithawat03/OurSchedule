@@ -26,3 +26,18 @@ Use timezone-aware Bangkok civil time with explicit +07:00, not device timezone.
 ## Transactional creation-rate guard
 
 At most **20 newly created personal events per Firebase UID per rolling 24-hour window**. Each create atomically increments the `users/{uid}/quotas/personalEvents` counter via `getAfter` and `lastResourceId`, like the M2 room/invite guard. Modified browsers cannot create multiple events with one quota transition. Edits/cancellations do not consume quota. This is a per-UID cost protection, **not** a defense against multi-account abuse. Client rate-limit errors show as a Thai validation message. Emulator tests cover cap and unmetered/duplicate resource attacks.
+
+
+## Controlled operator deploy command (after merged SHA approval)
+
+Only STAGING \`ourschedule\`. The repository contains \`scripts/release-m3-staging.sh\`, which verifies source is exactly current \`origin/main\`, the working tree is clean, Node 24.12+, and ignored \`.env.local\` matches the registered staging Firebase Web App. Then it runs locked install, production dependency audit, Lint, TS, Unit/Emulator Rules tests and Vite build. The operator must type \`DEPLOY M3 STAGING\` to proceed. It deploys **Firestore Rules first** and **Hosting second**, confirms served JS asset hash and PWA manifest/service worker, without altering index configuration or Production. The existing M2 composite members index is retained.
+
+\`\`\`bash
+cd ~/OurSchedule
+git status --short
+git fetch origin main
+git checkout --detach <EXACT_MERGED_M3_SHA>
+bash scripts/release-m3-staging.sh
+\`\`\`
+
+This process cannot be executed via the current GitHub connector alone: an authenticated Cloud Shell/Firebase CLI session is necessary. No CI PR job receives staging credentials or deploys. A successful Git merge is not a Firebase deployment.
