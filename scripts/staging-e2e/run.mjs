@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { build } from 'vite';
 import { STAGING_ORIGIN, SYNTHETIC_UIDS, validateStagingEnv } from './guard.mjs';
-import { deleteSyntheticAuthUser, mintFirebaseCustomToken, rulesGetDocument } from './identity.mjs';
+import { reconcileSyntheticAuthUser, mintFirebaseCustomToken, rulesGetDocument } from './identity.mjs';
 
 const BOOTSTRAP_PATH = '/__ourschedule_staging_e2e_bootstrap__';
 
@@ -31,8 +31,9 @@ async function getBootstrapCode() {
   return entry.code;
 }
 
-async function createBrowserIdentity(browser, firebaseConfig, code, uid, serviceAccount, oauthToken) {
+async function createBrowserIdentity(browser, firebaseConfig, code, uid, serviceAccount, oauthToken, registerContext) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
+  registerContext(context);
   const page = await context.newPage();
   const jwt = await mintFirebaseCustomToken({ serviceAccount, oauthToken, uid });
   await page.route(STAGING_ORIGIN + BOOTSTRAP_PATH, async (route) => {
@@ -60,13 +61,14 @@ async function main() {
   const bundle = await getBootstrapCode();
   const browser = await chromium.launch({ headless: true });
   const sessions = [];
+  const contexts = [];
   let failure = null;
   const cleanupFailures = [];
   try {
     for (const uid of SYNTHETIC_UIDS) {
       sessions.push(await createBrowserIdentity(
         browser, config.firebaseConfig, bundle, uid, config.serviceAccount,
-        process.env.GOOGLE_OAUTH_ACCESS_TOKEN,
+        process.env.GOOGLE_OAUTH_ACCESS_TOKEN, (context) => contexts.push(context),
       ));
     }
     const [owner, member] = sessions;
@@ -86,15 +88,24 @@ async function main() {
   } catch (error) {
     failure = error;
   } finally {
-    // Each user self-deletes using its own Firebase ID token, not Admin bypass.
-    // Firestore user-profile docs are deliberately retained by current Rules:
-    // stable synthetic UIDs make this bounded to exactly two known paths.
-    for (const session of [...sessions].reverse()) {
-      try { await deleteSyntheticAuthUser(config.apiKey, session.idToken); }
-      catch { cleanupFailures.push('test Auth UID self-delete'); }
-      try { await session.context.close(); } catch { cleanupFailures.push('browser context'); }
+    // Browser setup can fail after Auth account creation but before the returned
+    // session is recorded. Re-auth and self-delete both allowlisted synthetic
+    // UIDs independently of browser/session state, even on mid-sign-in failure.
+    // This uses Firebase user credentials; it never bypasses Firestore Rules.
+    for (const uid of [...SYNTHETIC_UIDS].reverse()) {
+      try {
+        await reconcileSyntheticAuthUser({
+          uid, apiKey: config.apiKey, serviceAccount: config.serviceAccount,
+          oauthToken: process.env.GOOGLE_OAUTH_ACCESS_TOKEN,
+        });
+      } catch {
+        cleanupFailures.push('synthetic Auth UID reconciliation');
+      }
     }
-    await browser.close();
+    for (const context of [...contexts].reverse()) {
+      try { await context.close(); } catch { cleanupFailures.push('browser context'); }
+    }
+    try { await browser.close(); } catch { cleanupFailures.push('browser close'); }
   }
   if (failure || cleanupFailures.length) {
     // Avoid emitting raw auth SDK/network errors, keys, signed JWTs or ID tokens.
@@ -102,7 +113,7 @@ async function main() {
       (failure ? 'Browser/Rules gate incomplete. ' : '') +
       (cleanupFailures.length ? 'Manual test Auth UID reconciliation required.' : ''));
   }
-  console.log('STAGING E2E: Synthetic Auth UID self-delete complete; two stable profile docs may remain.');
+  console.log('STAGING E2E: Both allowlisted synthetic Auth UIDs reconciled and deleted; two stable profile docs may remain.');
 }
 
 main().catch((error) => {
