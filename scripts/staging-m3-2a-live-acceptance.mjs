@@ -28,6 +28,9 @@ import {
 const cfg = process.env;
 validateStaging(cfg);
 const inviteToken = parseInviteInput(cfg.INVITE_TOKEN_M3);
+const onlyRevocation = cfg.M3_ONLY_REVOKE === '1';
+if (cfg.M3_ONLY_REVOKE && !['0', '1'].includes(cfg.M3_ONLY_REVOKE))
+  throw new Error('M3_ONLY_REVOKE must be 0, 1 or omitted');
 const major = Number(process.versions.node.split('.')[0]);
 if (major !== 24) throw new Error('Node 24 required');
 if (!process.stdin.isTTY || !process.stdout.isTTY)
@@ -146,7 +149,9 @@ async function createStage(label, count) {
 
 try {
   console.log('Firebase project: ' + PROJECT + ' STAGING ONLY. No Admin SDK and no Production.');
-  console.log('Will use 1 Owner invite, 1 temporary Anonymous UID, and 3 PRIVATE assigned activities.');
+  console.log(onlyRevocation
+    ? 'REVOKE-ONLY: 1 Owner invite, 1 temporary Anonymous UID, 1 PRIVATE assignment.'
+    : 'Full run: 1 Owner invite, 1 temporary Anonymous UID, 3 PRIVATE assignments.');
   console.log('Owner must remain signed in with Google and open the room assignment UI.');
   console.log('The selected existing room MUST use REQUIRE_ACCEPTANCE; this tool will stop otherwise.');
   const confirm = await pause('Type LIVE M3.2A STAGING to create temporary Member B: ');
@@ -197,43 +202,45 @@ try {
   if (before.length !== 0) fail('Unexpected assignments on new anonymous UID');
 
   console.log('\nOne joined Member now exists in room. Refresh Owner UI member list.');
-  const first = await createStage(LABEL_ACCEPT, 0);
-  await expectEventDenied('PENDING B denied private event details', first);
-  expect('B denied fake status+creator manipulation',
-    await codeOf([safeDeniedUpdate(
-      pathOf('users', uid, 'roomActivityInvites', first),
-      { creatorUid: { stringValue: uid }, state: { stringValue: 'ACCEPTED' } },
-    )]), 403);
-  expect('B cannot create unrelated Owner invite',
-    await codeOf([safeDeniedCreate(
-      pathOf('users', ownerUid, 'roomActivityInvites', 'm3-test-' + crypto.randomUUID()),
-      { state: { stringValue: 'ACCEPTED' } },
-    )]), 403);
-  expect('B accepts assignment with server timestamp',
-    await codeOf(decideInvitation(uid, first, 'ACCEPTED')), 200);
-  expect('Accepted Member B can read exactly assigned PRIVATE event',
-    await statusOf(getDoc('rooms/' + roomId + '/events/' + first)), 200);
-  expect('B cannot edit Creator event data',
-    await codeOf([safeDeniedUpdate(pathOf('rooms', roomId, 'events', first), {
-      title: { stringValue: 'NOT-WRITTEN' },
-    })]), 403);
-  expect('B cannot list PRIVATE event collection',
-    await statusOf(request(queryUrl(roomEventsListQuery(roomId).parent), 'POST', idToken,
-      roomEventsListQuery(roomId).body)), 403);
+  if (!onlyRevocation) {
+    const first = await createStage(LABEL_ACCEPT, 0);
+    await expectEventDenied('PENDING B denied private event details', first);
+    expect('B denied fake status+creator manipulation',
+      await codeOf([safeDeniedUpdate(
+        pathOf('users', uid, 'roomActivityInvites', first),
+        { creatorUid: { stringValue: uid }, state: { stringValue: 'ACCEPTED' } },
+      )]), 403);
+    expect('B cannot create unrelated Owner invite',
+      await codeOf([safeDeniedCreate(
+        pathOf('users', ownerUid, 'roomActivityInvites', 'm3-test-' + crypto.randomUUID()),
+        { state: { stringValue: 'ACCEPTED' } },
+      )]), 403);
+    expect('B accepts assignment with server timestamp',
+      await codeOf(decideInvitation(uid, first, 'ACCEPTED')), 200);
+    expect('Accepted Member B can read exactly assigned PRIVATE event',
+      await statusOf(getDoc('rooms/' + roomId + '/events/' + first)), 200);
+    expect('B cannot edit Creator event data',
+      await codeOf([safeDeniedUpdate(pathOf('rooms', roomId, 'events', first), {
+        title: { stringValue: 'NOT-WRITTEN' },
+      })]), 403);
+    expect('B cannot list PRIVATE event collection',
+      await statusOf(request(queryUrl(roomEventsListQuery(roomId).parent), 'POST', idToken,
+        roomEventsListQuery(roomId).body)), 403);
 
-  console.log('\nOWNER ACTION: cancel ONLY the activity titled ' + LABEL_ACCEPT);
-  await pause('After cancellation confirmation and SweetAlert2 toast, press Enter: ');
-  await expectEventDenied('Cancelled PRIVATE event no longer readable to B', first);
+    console.log('\nOWNER ACTION: cancel ONLY the activity titled ' + LABEL_ACCEPT);
+    await pause('After cancellation confirmation and SweetAlert2 toast, press Enter: ');
+    await expectEventDenied('Cancelled PRIVATE event no longer readable to B', first);
 
-  const second = await createStage(LABEL_DECLINE, 1);
-  await expectEventDenied('Pending B denied second PRIVATE event', second);
-  expect('B declines second assignment',
-    await codeOf(decideInvitation(uid, second, 'DECLINED')), 200);
-  await expectEventDenied('Declined PRIVATE event remains unreadable to B', second);
-  expect('B cannot change declined decision to accepted',
-    await codeOf(decideInvitation(uid, second, 'ACCEPTED')), 403);
+    const second = await createStage(LABEL_DECLINE, 1);
+    await expectEventDenied('Pending B denied second PRIVATE event', second);
+    expect('B declines second assignment',
+      await codeOf(decideInvitation(uid, second, 'DECLINED')), 200);
+    await expectEventDenied('Declined PRIVATE event remains unreadable to B', second);
+    expect('B cannot change declined decision to accepted',
+      await codeOf(decideInvitation(uid, second, 'ACCEPTED')), 403);
 
-  const third = await createStage(LABEL_REVOKE, 2);
+  }
+  const third = await createStage(LABEL_REVOKE, onlyRevocation ? 0 : 2);
   expect('B accepts third assignment',
     await codeOf(decideInvitation(uid, third, 'ACCEPTED')), 200);
   expect('B reads accepted third PRIVATE event',
@@ -255,7 +262,7 @@ try {
   // Historical teaser is allowed to remain in B inbox. Event contents
   // MUST remain denied; do not interpret archived inbox as active access.
   const history = await inbox();
-  if (history.length !== 3) fail('Unexpected history after Member removal');
+  if (history.length !== (onlyRevocation ? 1 : 3)) fail('Unexpected history after Member removal');
   console.log('Scoped recipient decision history preserved: PASS');
   testPassed = true;
 } catch (error) {
@@ -276,6 +283,9 @@ try {
       console.error('WARNING: Could not verify Member cleanup; Owner must remove B manually');
     }
   }
+  if (!testPassed && memberCleaned) {
+    console.log('Cleanup of temporary Member is NOT proof of Owner-triggered revocation.');
+  }
   if (idToken) {
     try {
       await auth('accounts:delete', { idToken });
@@ -287,13 +297,19 @@ try {
   }
   rl.close();
   console.log('MANDATORY NOW: turn Anonymous Sign-in back to DISABLED in Firebase STAGING.');
-  console.log('OWNER CLEANUP: soft-cancel remaining M32A-DECLINE and M32A-REVOKE test activities.');
+  console.log(onlyRevocation
+    ? 'OWNER CLEANUP: soft-cancel the M32A-REVOKE test activity.'
+    : 'OWNER CLEANUP: soft-cancel remaining M32A-DECLINE and M32A-REVOKE test activities.');
   console.log('Accepted room invite, event docs and per-recipient inbox docs remain as Staging audit.');
   console.log('Never share bearer invite/token, full UID, API key or ID token in chat or GitHub.');
   if (testPassed && authCleaned && memberCleaned && !cancelledBySignal) {
-    console.log('M3.2A LIVE SECURITY ACCEPTANCE: PASS');
+    console.log(onlyRevocation
+      ? 'M3.2A REVOKE-ONLY LIVE SECURITY ACCEPTANCE: PASS'
+      : 'M3.2A LIVE SECURITY ACCEPTANCE: PASS');
   } else {
     process.exitCode = 1;
-    console.error('M3.2A LIVE SECURITY ACCEPTANCE: INCOMPLETE');
+    console.error(onlyRevocation
+      ? 'M3.2A REVOKE-ONLY LIVE SECURITY ACCEPTANCE: INCOMPLETE'
+      : 'M3.2A LIVE SECURITY ACCEPTANCE: INCOMPLETE');
   }
 }

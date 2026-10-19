@@ -51,3 +51,42 @@ After the checks the tool deletes the temporary Anonymous Auth account and verif
 The test validates real \`REQUIRE_ACCEPTANCE\` path only: M3.2a PRIVATE *single-recipient* Owner-to-Member assignment, B's one-way decisions, denial of unrelated Owner data, cancellation and Member revocation. **AUTO_ASSIGN is covered in Emulator tests, not by this live harness.** Room-wide \`ROOM\`/\`BUSY_ONLY\` visibility, group assignments, event ownership delegation, globally secure quotas/App Check, and Production deployment remain out of scope. Only a separate security-reviewed phase may open those gates.
 
 The Owner's active room quota is unaffected; **one invitation and three assigned events** count against their rolling quotas. Stop early if those limits may be exceeded. Do not run in a real production room.
+
+
+## 2026-10-19: Focused recovery for recipient B mismatch in REVOKE stage
+
+During the first attended 3-activity live test, the Owner and recipient B successfully validated the complete ACCEPT, cancellation and DECLINE sections. At the third stage, the assertion \`Expected exactly one new recipient assignment\` failed **before** B accepted the third assignment and **before** Owner removal/revocation. The script's \`finally\` verified temporary B membership cleanup and B Auth deletion; that self-cleanup is **not a pass for Owner-enforced membership revocation**. Root cause is not yet established: the inbox query returned either fewer or more items than the strict expected count of 3 (the old assertion did not print the actual count), e.g. wrong room/member selected, missing write, double submission or race. **Do not assert a privacy vulnerability or a test pass from this symptom alone.**
+
+First **DISABLE Anonymous provider** immediately, review Firebase Auth > Users and soft-cancel all active leftover \`M32A-DECLINE\` and \`M32A-REVOKE\` test events in the Owner room view (including duplicate-title items). Do not edit other private events. The old room invite was consumed and the anonymous B principal deleted; they cannot be reused.
+
+For a safe final-stage retry, \`M3_ONLY_REVOKE=1\` skips ACCEPT/DECLINE already passed and tests **only**:
+- Create new B from a new single-use invitation in a \`REQUIRE_ACCEPTANCE\` STAGING test room.
+- B's fresh recipient inbox begins with zero entries.
+- Owner creates ONE \`M32A-REVOKE\` PRIVATE assignment for exactly B. The harness now reports sanitized expected/observed inbox counts and matching-title counts on mismatch; it never prints event contents or IDs.
+- B sees PENDING, accepts the event, obtains one direct event read; Owner **removes B via Web UI**; B must immediately be denied event and room read; joined-room query must be empty.
+- The script best-effort cleans B's Auth and any residual Member, then operator again immediately **DISABLES Anonymous** and soft-cancels remaining test activity.
+- This retry costs **one new room invitation and one new room activity** against the rolling Staging owner quotas, not another three. If quota is exhausted, wait until the limit resets; do not change quota in production.
+
+### Cloud Shell commands for focused retry (only after reviewed PR merge)
+
+\`\`\`bash
+cd ~/OurSchedule
+git status --short
+git fetch origin main
+git checkout --detach <MERGED_RETRY_SHA>
+
+# Create one NEW Owner-supplied room invite for the test room first.
+read -r -s -p "New unused M3.2a invite: " INVITE_TOKEN_M3
+echo
+export INVITE_TOKEN_M3
+
+# ENABLE Anonymous only just before the attended run (STAGING).
+M3_ONLY_REVOKE=1 node --env-file=.env.local scripts/staging-m3-2a-live-acceptance.mjs
+result=$?
+unset INVITE_TOKEN_M3
+echo "M3.2a revoke-only live exit code: $result"
+\`\`\`
+
+At the typed confirmation \`LIVE M3.2A STAGING\`, the script still creates temporary B and validates live staging identity; it now prompts **only** for the single \`M32A-REVOKE\` assignment and a later Owner Member removal. Expected marker is \`M3.2A REVOKE-ONLY LIVE SECURITY ACCEPTANCE: PASS\`. Combined with previous log evidence for ACCEPT/DECLINE, this verifies the previously missing revocation scope; it **does not** imply full live AUTO_ASSIGN validation or all privacy modes.
+
+If an assertion fails, preserve only sanitized counts/status/error text, disable Anonymous again, and diagnose before another run. Never post the invitation token, full UID, ID token, Firebase API key or real/private event content.
