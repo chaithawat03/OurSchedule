@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {validatePhase2bEnvironment,validatePreviewUrl,OWNER_UID,MEMBER_UID} from
   '../../scripts/staging-e2e/phase2b/guard.mjs';
-import {validateCleanupDocument,validateInventoryDocuments} from
+import {cleanIsolatedDatabase,validateCleanupDocument,validateInventoryDocuments} from
   '../../scripts/staging-e2e/phase2b/cleanup.mjs';
 
 const prefix='projects/ourschedule/databases/ourschedule-e2e/documents/';
@@ -97,4 +97,51 @@ test('Firebase code routes named DB only for specially marked preview builds',()
   assert.equal(cfg.firestore.database,'ourschedule-e2e');
   assert.equal(cfg.hosting.public,'dist');
   assert.equal(cfg.firestore.rules,'firestore.rules');
+});
+
+
+test('scoped cleanup inventories before deleting; empty HTTP 200 DELETE body is fine',async()=>{
+  const root='https://firestore.googleapis.com/v1/projects/ourschedule/databases/ourschedule-e2e/documents';
+  const db=new Map([[owner.path,owner.document],[member.path,member.document],[room.path,room.document]]);
+  const seen=[];
+  const fetchImpl=async (url,request)=>{
+    assert.ok(url.startsWith(root),'Never send admin request outside named E2E DB');
+    assert.equal(request.headers.authorization,'Bearer '+'T'.repeat(75));
+    const path=url.slice(root.length);
+    seen.push(request.method+':'+path);
+    if(path===':listCollectionIds') {
+      return {ok:true,status:200,json:async()=>({
+        collectionIds:[...new Set([...db.keys()].map(p=>p.split('/')[0]))],
+      })};
+    }
+    if(path.endsWith(':listCollectionIds')) {
+      return {ok:true,status:200,json:async()=>({collectionIds:[]})};
+    }
+    if(request.method==='DELETE'){
+      db.delete(path.slice(1));
+      return {ok:true,status:200,json:async()=>{throw Error('Must not parse empty DELETE body')}};
+    }
+    const group=path.split('?')[0].slice(1);
+    const matches=[...db.entries()].filter(([k])=>k.split('/').length===2 && k.startsWith(group+'/'));
+    return {ok:true,status:200,json:async()=>({documents:matches.map(([,v])=>v)})};
+  };
+  const deleted=await cleanIsolatedDatabase('T'.repeat(75),fetchImpl);
+  assert.equal(deleted,3);
+  assert.equal(db.size,0);
+  assert.ok(seen.indexOf('DELETE:/users/'+OWNER_UID)>seen.indexOf('POST::listCollectionIds'));
+});
+
+test('unknown user aborts BEFORE all deletes',async()=>{
+  const root='https://firestore.googleapis.com/v1/projects/ourschedule/databases/ourschedule-e2e/documents';
+  let deletes=0;
+  const foreign=doc('users/foreign_user');
+  const fetchImpl=async (url,request)=>{
+    assert.ok(url.startsWith(root));
+    if(request.method==='DELETE')deletes++;
+    if(url.endsWith(':listCollectionIds')) return {ok:true,status:200,
+      json:async()=>({collectionIds:url===root+':listCollectionIds'?['users']:[]})};
+    return {ok:true,status:200,json:async()=>({documents:[foreign]})};
+  };
+  await assert.rejects(cleanIsolatedDatabase('T'.repeat(75),fetchImpl));
+  assert.equal(deletes,0);
 });
