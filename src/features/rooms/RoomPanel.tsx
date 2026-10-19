@@ -4,6 +4,7 @@ import { createOwnedRoom, listOwnedRooms, type OwnedRoom } from '../../services/
 import InvitationPanel from './InvitationPanel';
 import JoinedRooms from './JoinedRooms';
 import MemberManager from './MemberManager';
+import RoomActivityPanel from './RoomActivityPanel';
 
 export default function RoomPanel({ user }: { user: User | null }) {
   const [name, setName] = useState('');
@@ -70,6 +71,7 @@ export default function RoomPanel({ user }: { user: User | null }) {
           <InvitationPanel user={user} rooms={rooms} onJoined={() => setRefresh((value) => value + 1)} />
           <JoinedRooms user={user} refreshKey={refresh} />
           <MemberManager user={user} rooms={rooms} />
+          <RoomActivityPanel user={user} rooms={rooms} />
         </>
       ) : <p>เข้าสู่ระบบด้วย Google เพื่อสร้างและดูห้องที่คุณเป็นเจ้าของ</p>}
     </section>
