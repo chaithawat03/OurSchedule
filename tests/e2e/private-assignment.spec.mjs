@@ -82,8 +82,12 @@ test('M3.2a PRIVATE assignment, SweetAlert2, recipient isolation and owner revoc
     await owner.getByRole('button', { name: 'สร้างลิงก์เชิญ' }).click();
     await expect(owner.getByText('สร้างคำเชิญแล้ว · ใช้ได้ครั้งเดียวภายใน 48 ชั่วโมง')).toBeVisible();
     const inviteLink = (await owner.locator('.invite-link').textContent()).trim();
-    // Never log the bearer invite token.
-    await member.getByRole('textbox', { name: 'ลิงก์หรือรหัสคำเชิญ' }).fill(inviteLink);
+    // The UI intentionally parses full links only from HTTPS staging origins.
+    // In localhost emulator tests, pass just the bearer token (not an HTTP URL).
+    const inviteToken = new URLSearchParams(new URL(inviteLink).hash.slice(1)).get('invite');
+    expect(inviteToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // Never print the token; it belongs exclusively to the demo emulator.
+    await member.getByRole('textbox', { name: 'ลิงก์หรือรหัสคำเชิญ' }).fill(inviteToken);
     await member.getByRole('button', { name: 'เข้าร่วมห้อง' }).click();
     await expect(member.getByText('เข้าร่วมห้องสำเร็จ')).toBeVisible();
     await expect(member.getByText('คุณเข้าร่วม: ' + tag)).toBeVisible();
