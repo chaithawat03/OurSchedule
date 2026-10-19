@@ -63,12 +63,25 @@ export function parseInboxDocument(document, uid, roomId, ownerUid) {
 
 export function findNewAssignment(rows, label, previousCount) {
   if (!STAGES.includes(label)) throw new Error('Unknown acceptance phase');
-  if (rows.length !== previousCount + 1) {
-    throw new Error('Expected exactly one new recipient assignment');
-  }
+  const expected = previousCount + 1;
   const matches = rows.filter((x) => x.title === label);
+  // Never print UIDs, document paths, invite contents, or sensitive event notes.
+  // Distinguish recipient mismatch (no new item) from duplicate submissions.
+  if (rows.length !== expected) {
+    throw new Error(
+      'Recipient inbox count mismatch for ' + label +
+      ': expected ' + expected + ', found ' + rows.length +
+      ', matching title ' + matches.length +
+      '. Inspect correct room/member and duplicate sends; do not retry blindly.',
+    );
+  }
   if (matches.length !== 1 || matches[0].state !== 'PENDING') {
-    throw new Error('Expected a unique PENDING assignment of the exact requested title');
+    throw new Error(
+      'Recipient inbox stage mismatch for ' + label +
+      ': matching title ' + matches.length +
+      ', pending ' + matches.filter((x) => x.state === 'PENDING').length +
+      '. Verify correct recipient and room.',
+    );
   }
   return matches[0];
 }

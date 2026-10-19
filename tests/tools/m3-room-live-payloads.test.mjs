@@ -68,5 +68,11 @@ describe('M3.2a attended live harness builders (offline)', () => {
     assert.deepEqual(findNewAssignment([first, second, third], LABEL_REVOKE, 2), third);
     assert.throws(() => findNewAssignment([first, second], LABEL_ACCEPT, 0));
     assert.throws(() => findNewAssignment([{ ...first, state: 'ACCEPTED' }], LABEL_ACCEPT, 0));
+    assert.throws(() => findNewAssignment([], LABEL_REVOKE, 0),
+      /expected 1, found 0, matching title 0/);
+    assert.throws(() => findNewAssignment([first, { ...first, eventId: 'another' }], LABEL_REVOKE, 0),
+      /expected 1, found 2, matching title 0/);
+    assert.throws(() => findNewAssignment([first], LABEL_REVOKE, 0),
+      /matching title 0, pending 0/);
   });
 });
