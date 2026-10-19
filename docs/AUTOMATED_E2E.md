@@ -2,15 +2,15 @@
 
 This pipeline creates **two independent Firebase Auth Emulator anonymous users** in separate Chromium browser contexts, runs UI transactions against the local Firestore Emulator with the project's actual Firestore Security Rules, then terminates both emulators on completion. It uses a **demo-** project ID and a synthetic API key. It never uses the staging Firebase configuration. Live Staging's **Anonymous Provider remains DISABLED**; test-only anonymous accounts cannot enter the live Firebase Auth user list.
 
-\`\`\`bash
+```bash
 npm ci
 npx playwright install --with-deps chromium
 npm run test:e2e
-\`\`\`
+```
 
 On each pull request, GitHub Actions separately runs this same command automatically (under CI). Playwright creates an owner and member, one fresh room, an invitation, PRIVATE assignments and a SweetAlert2 flow. It tests PENDING cannot view detail; ACCEPT permits direct event read; CANCEL revokes it; DECLINE cannot read and cannot be changed to ACCEPT; a third ACCEPT followed by Owner removing the member immediately forbids room/private event reads and member discovery. No operator login, cloud key, token or manual browser actions are needed.
 
-This is a **real two-UID emulator acceptance**, not live Firebase Staging acceptance and not actual Google OAuth acceptance. The browser dev-only test bridge is allowed only for \`demo-ourschedule-e2e\` on Vite DEV with \`VITE_E2E_EMULATORS=1\`. Production bundles will not import it; the Firebase client rejects the emulator flag if project/authDomain/key are not exactly synthetic.
+This is a **real two-UID emulator acceptance**, not live Firebase Staging acceptance and not actual Google OAuth acceptance. The browser dev-only test bridge is allowed only for `demo-ourschedule-e2e` on Vite DEV with `VITE_E2E_EMULATORS=1`. Production bundles will not import it; the Firebase client rejects the emulator flag if project/authDomain/key are not exactly synthetic.
 
 ## Rollout sequence
 

@@ -73,6 +73,8 @@ jobs:
         run: npm run test:rules
       - name: Production build
         run: npm run build
+      - name: Ensure test bridge is absent from public build
+        run: node scripts/check-no-e2e-bridge-in-build.mjs
       - name: Enforce production dependency audit after regression tests
         if: ${{ always() && steps.audit_prod.outcome == 'failure' }}
         run: |
