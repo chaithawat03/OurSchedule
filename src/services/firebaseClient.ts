@@ -50,7 +50,7 @@ const p2bAllowed = import.meta.env.PROD
   && config.appId.startsWith('1:400176852634:web:')
   && import.meta.env.VITE_PHASE2B_DATABASE_ID === 'ourschedule-e2e'
   && typeof window !== 'undefined'
-  && /^ourschedule--p2b-e2e-[a-z0-9-]+\\.web\\.app$/.test(window.location.hostname);
+  && /^ourschedule--p2b-e2e-[a-z0-9-]+\.web\.app$/.test(window.location.hostname);
 if (p2bRequested && !p2bAllowed) {
   throw new Error('Refusing Phase 2b outside its named database and Hosting preview');
 }
