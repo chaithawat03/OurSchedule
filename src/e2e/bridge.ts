@@ -43,13 +43,14 @@ async function readResult(operation: () => Promise<boolean>): Promise<ReadOutcom
   }
 }
 export function installE2eBridge() {
+  const client = firebaseClient;
   if (import.meta.env.PROD || import.meta.env.VITE_E2E_EMULATORS !== '1' ||
     import.meta.env.VITE_FIREBASE_PROJECT_ID !== 'demo-ourschedule-e2e' ||
-    !firebaseClient) throw new Error('Attempt to install E2E test bridge outside demo emulators');
+    !client) throw new Error('Attempt to install E2E test bridge outside demo emulators');
 
   window.__ourscheduleE2e = {
     async signIn() {
-      await signInAnonymously(firebaseClient.auth);
+      await signInAnonymously(client.auth);
     },
     uid() { return requireClient().uid; },
     async ownedRoomId(name) {
