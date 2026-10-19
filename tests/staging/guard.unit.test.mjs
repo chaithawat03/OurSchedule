@@ -24,6 +24,7 @@ for (const [field, value] of [
   ['GITHUB_REF', 'refs/pull/123/merge'],
   ['GITHUB_EVENT_NAME', 'pull_request'],
   ['STAGING_E2E_SERVICE_ACCOUNT', 'x@production.iam.gserviceaccount.com'],
+  ['STAGING_E2E_APP_ID', '1:999999999999:web:abcdef'],
   ['GOOGLE_OAUTH_ACCESS_TOKEN', ''],
 ]) {
   test('fail closed for ' + field, () => {
