@@ -93,12 +93,20 @@ async function main() {
     // UIDs independently of browser/session state, even on mid-sign-in failure.
     // This uses Firebase user credentials; it never bypasses Firestore Rules.
     for (const uid of [...SYNTHETIC_UIDS].reverse()) {
+      const role = uid === SYNTHETIC_UIDS[0] ? 'owner' : 'member';
       try {
         await reconcileSyntheticAuthUser({
           uid, apiKey: config.apiKey, serviceAccount: config.serviceAccount,
           oauthToken: process.env.GOOGLE_OAUTH_ACCESS_TOKEN,
         });
-      } catch {
+        console.log('STAGING E2E: synthetic Auth cleanup ' + role + ': PASS');
+      } catch (error) {
+        // Log only the role and an allowlisted HTTP status. Never leak raw
+        // Firebase errors, signed tokens, UIDs, response bodies or OAuth data.
+        const status = error instanceof Error
+          ? error.message.match(/\bHTTP ([45]\d\d)\b/)?.[1] : undefined;
+        console.error('STAGING E2E: synthetic Auth cleanup ' + role +
+          ': FAILED' + (status ? ' (HTTP ' + status + ')' : ' (unclassified)'));
         cleanupFailures.push('synthetic Auth UID reconciliation');
       }
     }
