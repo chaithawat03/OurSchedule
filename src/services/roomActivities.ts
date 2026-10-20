@@ -135,7 +135,9 @@ export async function getAssignedPrivateRoomActivity(
   recipient: User, roomId: string, eventId: string,
 ): Promise<RoomActivity> {
   const db = dbFor(recipient);
-  const result = await getDoc(doc(db, 'rooms', roomId, 'events', eventId));
+  // A cached document can outlive membership revocation. Force a server-side
+  // Rules check before returning any accepted PRIVATE event details.
+  const result = await getDocFromServer(doc(db, 'rooms', roomId, 'events', eventId));
   if (!result.exists()) throw new Error('กิจกรรมถูกยกเลิกหรือไม่มีสิทธิ์เข้าถึง');
   const item = result.data();
   if (!(item.startAt instanceof Timestamp) || !(item.endAt instanceof Timestamp)) {
