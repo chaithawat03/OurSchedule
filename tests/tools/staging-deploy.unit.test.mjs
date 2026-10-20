@@ -138,7 +138,9 @@ test('gate passes only if both real PR workflows succeeded for exact head SHA',a
 test('PR verification checks bounded historical pages without relying on synthetic merge head_sha',async()=>{
   const unrelated=Array.from({length:100},(_,index)=>({
     ...successRun('PR CI','pr-ci.yml'),
-    pull_requests:[{number:123+index,head:{sha:head},base:{ref:'main'}}],
+    head_branch:'unrelated-branch',
+    created_at:'2026-10-18T00:00:00Z',
+    pull_requests:[{number:123+index,head:{sha:'d'.repeat(40)},base:{ref:'main'}}],
   }));
   const result=await verifyMergedMainCi(sha,env,fakeFetch({
     ciPages:{1:unrelated,2:[successRun('PR CI','pr-ci.yml')]},
