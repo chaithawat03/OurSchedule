@@ -34,7 +34,8 @@ export function validateRefreshEnvironment(env) {
   assert.equal(env.STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED, 'true');
   assert.equal(env.STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT,
     'e2e-preview-deployer@ourschedule.iam.gserviceaccount.com');
-  assert.equal(env.STAGING_E2E_APP_ID?.slice(0, 17), '1:400176852634:web:');
+  assert.ok(env.STAGING_E2E_APP_ID?.startsWith('1:400176852634:web:'),
+    'Invalid Staging Firebase App ID');
   assert.ok((env.STAGING_E2E_APP_ID ?? '').length > 21);
   assert.match(env.STAGING_E2E_API_KEY ?? '', /^[A-Za-z0-9_-]{15,128}$/);
   const url = new URL(env.STAGING_E2E_PHASE2B_PREVIEW_URL);
