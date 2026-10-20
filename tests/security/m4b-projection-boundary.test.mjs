@@ -21,7 +21,8 @@ before(async () => {
     projectId: 'demo-ourschedule-ci',
     firestore: { rules: readFileSync('firestore.rules', 'utf8') },
   });
-  await environment.withSecurityRulesDisabled(async ({ firestore }) => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
     await setDoc(doc(firestore, 'rooms', roomId), {
       ownerUid, name: 'Privacy Boundary', assignmentPolicy: 'REQUIRE_ACCEPTANCE',
       defaultVisibility: 'PRIVATE', createdAt: time, updatedAt: time,
@@ -83,7 +84,8 @@ describe('M4b projection sharing remains denied until a dedicated Rules release'
   });
 
   it('never exposes PRIVATE room activity details to a different active member', async () => {
-    await environment.withSecurityRulesDisabled(async ({ firestore }) => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
       await setDoc(doc(firestore, 'rooms', roomId, 'members', 'm4b-recipient'), {
         uid:'m4b-recipient',role:'member',membershipState:'active',
         joinedAt:time,inviteId:'b'.repeat(43),
