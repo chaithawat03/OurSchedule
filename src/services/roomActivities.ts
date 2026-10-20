@@ -1,6 +1,6 @@
 import type { User } from 'firebase/auth';
 import {
-  collection, doc, getDoc, getDocs, limit, orderBy, query, runTransaction,
+  collection, doc, getDoc, getDocFromServer, getDocs, limit, orderBy, query, runTransaction,
   serverTimestamp, Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { firebaseClient } from './firebaseClient';
