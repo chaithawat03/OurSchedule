@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bangkokInstant, bangkokLocal, bangkokDayKey, nextBangkokDay, monthReadWindow, overlapsDay, validateActivity } from './activityDates';
+import { bangkokInstant, bangkokLocal, bangkokDayKey, nextBangkokDay, shiftBangkokDay, monthReadWindow, overlapsDay, validateActivity } from './activityDates';
 
 describe('M3 private activity Bangkok date boundaries', () => {
   it('handles local time independent from browser timezone', () => {
@@ -28,6 +28,14 @@ describe('M3 private activity Bangkok date boundaries', () => {
     expect(overlapsDay(start, end, '2026-10-21')).toBe(false);
     expect(nextBangkokDay('2026-12-31')).toBe('2027-01-01');
     expect(overlapsDay(bangkokInstant('2026-10-19T00:00'), bangkokInstant('2026-10-20T00:00'), '2026-10-20')).toBe(false);
+  });
+  it('moves day view by civil days across month and year boundaries', () => {
+    expect(shiftBangkokDay('2026-10-31', 1)).toBe('2026-11-01');
+    expect(shiftBangkokDay('2027-01-01', -1)).toBe('2026-12-31');
+    expect(shiftBangkokDay('2028-02-28', 1)).toBe('2028-02-29');
+    expect(shiftBangkokDay('2028-02-29', 1)).toBe('2028-03-01');
+    expect(() => shiftBangkokDay('2026-02-30', 1)).toThrow();
+    expect(() => shiftBangkokDay('2026-10-20', 0.5)).toThrow();
   });
   it('validates event names, bytes, and maximum duration', () => {
     const start = bangkokInstant('2026-10-19T10:00');
