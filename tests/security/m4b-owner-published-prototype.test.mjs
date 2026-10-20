@@ -143,8 +143,9 @@ describe('M4b owner-published shared calendar: isolated emulator prototype only'
     await assertFails(updateDoc(doc(db(b),path(room,'explicit-room-entry')),{title:'forge'}));
     await assertFails(deleteDoc(doc(db(b),path(room,'explicit-room-entry'))));
     await assertSucceeds(deleteDoc(entry));
-    const snap=await assertSucceeds(getDoc(doc(db(b),path(room,'explicit-room-entry'))));
-    assert.equal(snap.exists(),false);
+    const afterDelete=await assertSucceeds(getDocs(query(
+      collection(db(b),'rooms',room,'sharedCalendarV1'),limit(20))));
+    assert.equal(afterDelete.docs.some(item=>item.id==='explicit-room-entry'),false);
   });
 
   it('member revocation prevents new reads regardless of knowledge of document IDs',async()=>{
