@@ -79,8 +79,8 @@ export function validatePreviewChannel(channel, expectedOrigin, now = Date.now()
   assert.ok(Number.isFinite(expiration), 'Preview expiration unavailable');
   assert.ok(expiration > now, 'Preview already expired; no implicit channel recreation');
   if(requireRenewed) {
-    assert.ok(expiration > now + 6 * 86400_000,
-      'Preview refresh did not extend expiration at least six days');
+    assert.ok(expiration > now + 20 * 86400_000,
+      'Preview refresh did not extend expiration at least twenty days');
   }
   return Object.freeze({ expiresAt:new Date(expiration).toISOString(),
     version:channel.release.version.name });
@@ -93,7 +93,7 @@ export function validateCliResult(stdout, expectedOrigin) {
   const item=result.result?.default;
   assert.equal(item?.site,SITE,'Firebase CLI selected a different site');
   assert.equal(item?.url,expectedOrigin,'Firebase CLI changed the preview URL');
-  assert.ok(Date.parse(item?.expireTime) > Date.now() + 6 * 86400_000,
+  assert.ok(Date.parse(item?.expireTime) > Date.now() + 20 * 86400_000,
     'Firebase CLI failed to extend preview lifespan');
 }
 
@@ -125,7 +125,7 @@ async function main(mode) {
   assert.ok((env.GOOGLE_APPLICATION_CREDENTIALS ?? '').length>0,
     'WIF application default credentials are required');
   const args=['firebase-tools','hosting:channel:deploy',CHANNEL,
-    '--expires','7d','--config','firebase.phase2b.json',
+    '--expires','21d','--config','firebase.phase2b.json',
     '--project',SITE,'--json','--non-interactive'];
   const cmd=spawnSync('npx',args,{
     cwd:process.cwd(),env:{...env,FIREBASE_TOKEN:''},
