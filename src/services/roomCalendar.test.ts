@@ -3,11 +3,12 @@ import {bangkokInstant} from '../lib/activityDates';
 import { listPrivateRoomCalendar } from './roomCalendar';
 
 const mocks=vi.hoisted(()=>({
-  owned:vi.fn(),joined:vi.fn(),inbox:vi.fn(),ownerEvents:vi.fn(),assigned:vi.fn(),
+  owned:vi.fn(),joined:vi.fn(),inbox:vi.fn(),ownerEvents:vi.fn(),assigned:vi.fn(),members:vi.fn(),
 }));
 vi.mock('./rooms',()=>({
   listOwnedRooms:mocks.owned,listJoinedRooms:mocks.joined,
 }));
+vi.mock('./invitations',()=>({listRoomMembers:mocks.members}));
 vi.mock('./roomActivities',()=>({
   listOwnedRoomActivities:mocks.ownerEvents,
   listRoomActivityInvitations:mocks.inbox,
@@ -26,6 +27,7 @@ beforeEach(()=>{
   mocks.joined.mockResolvedValue([]);
   mocks.inbox.mockResolvedValue([]);
   mocks.ownerEvents.mockResolvedValue([]);
+  mocks.members.mockResolvedValue([{uid:'accepted-member',role:'member'}]);
   mocks.assigned.mockResolvedValue({
     id:'accepted-id',roomId:'member-room',title:'Allowed only',
     notes:'restricted',status:'active',start:time('2026-10-20T09:00'),
@@ -36,13 +38,13 @@ describe('M4 calendar authorized private data loader',()=>{
   it('includes only accepted active owner assignments, never pending or declined',async()=>{
     mocks.owned.mockResolvedValue([own('owner-room')]);
     mocks.ownerEvents.mockResolvedValue([
-      {id:'a',title:'ACCEPTED',status:'active',assignmentState:'ACCEPTED',
+      {id:'a',recipientUid:'accepted-member',title:'ACCEPTED',status:'active',assignmentState:'ACCEPTED',
         notes:'owner-data',start:time('2026-10-20T12:00'),end:time('2026-10-20T13:00')},
-      {id:'b',title:'PENDING',status:'active',assignmentState:'PENDING',
+      {id:'b',recipientUid:'accepted-member',title:'PENDING',status:'active',assignmentState:'PENDING',
         start:time('2026-10-20T12:00'),end:time('2026-10-20T13:00')},
-      {id:'c',title:'CANCELLED',status:'cancelled',assignmentState:'ACCEPTED',
+      {id:'c',recipientUid:'accepted-member',title:'CANCELLED',status:'cancelled',assignmentState:'ACCEPTED',
         start:time('2026-10-20T12:00'),end:time('2026-10-20T13:00')},
-      {id:'d',title:'OLDER',status:'active',assignmentState:'ACCEPTED',
+      {id:'d',recipientUid:'accepted-member',title:'OLDER',status:'active',assignmentState:'ACCEPTED',
         start:time('2026-09-20T12:00'),end:time('2026-09-20T13:00')},
     ]);
     const result=await listPrivateRoomCalendar(user,2026,9,false);
@@ -50,6 +52,18 @@ describe('M4 calendar authorized private data loader',()=>{
     expect(result.events[0]).toMatchObject({roomId:'owner-room',source:'room',
       notes:'owner-data'});
     expect(mocks.assigned).not.toHaveBeenCalled();
+  });
+  it('hides owner appointments after recipient membership is revoked',async()=>{
+    mocks.owned.mockResolvedValue([own('owner-room')]);
+    mocks.members.mockResolvedValue([{uid:user.uid,role:'owner'}]);
+    mocks.ownerEvents.mockResolvedValue([{
+      id:'accepted-no-longer-member',recipientUid:'revoked-recipient',
+      title:'Old assignment',notes:'secret',status:'active',assignmentState:'ACCEPTED',
+      start:time('2026-10-20T11:00'),end:time('2026-10-20T12:00'),
+    }]);
+    const result=await listPrivateRoomCalendar(user,2026,9,false);
+    expect(result.events).toEqual([]);
+    expect(mocks.members).toHaveBeenCalledWith(user,'owner-room');
   });
   it('reads accepted inbox ONLY if membership is still active and selected',async()=>{
     mocks.joined.mockResolvedValue([{id:'member-room',name:'My second room'}]);
