@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import type { PersonalActivity } from '../../services/personalActivities';
+import type { CalendarEvent } from '../../lib/unifiedCalendar';
 import { personalDayAgenda } from '../../lib/dayAgenda';
 
 interface Props {
   day: string;
   heading: string;
-  events: PersonalActivity[];
+  events: CalendarEvent[];
   userReady: boolean;
   busy: boolean;
   error: string;
@@ -18,7 +18,7 @@ export default function DayAgenda({ day, heading, events, userReady, busy, error
     <section className="day-agenda" aria-label="กำหนดการรายวัน" aria-busy={busy}>
       <div className="day-agenda-heading">
         <div><p className="eyebrow">DAY AGENDA · ASIA/BANGKOK</p><h2>{heading}</h2></div>
-        <span className="private-chip">PRIVATE</span>
+        <span className="private-chip">PRIVATE · เฉพาะที่ได้รับสิทธิ์</span>
       </div>
       {!userReady && <p className="day-agenda-message">เข้าสู่ระบบเพื่อดูกำหนดการส่วนตัวของวันนี้</p>}
       {userReady && <>
@@ -33,6 +33,7 @@ export default function DayAgenda({ day, heading, events, userReady, busy, error
               <span className="day-agenda-time">{timeLabel}</span>
               <div className="day-agenda-details">
                 <strong>{activity.title}</strong>
+                {activity.source === 'room' && <small className="day-agenda-source">ห้อง: {activity.roomName}</small>}
                 {activity.notes && <p>{activity.notes}</p>}
                 {startedEarlier && <small>ต่อเนื่องจากวันก่อนหน้า</small>}
                 {endsLater && <small>ต่อเนื่องถึงวันถัดไป</small>}
@@ -40,7 +41,7 @@ export default function DayAgenda({ day, heading, events, userReady, busy, error
             </li>)}
         </ol>
       </>}
-      <p className="day-agenda-helper">แสดงเฉพาะกิจกรรมส่วนตัวของบัญชีที่เข้าสู่ระบบ · จัดการหรือเพิ่มกิจกรรมได้ในส่วนด้านล่าง</p>
+      <p className="day-agenda-helper">แสดงกิจกรรมส่วนตัวและกิจกรรม PRIVATE ที่ได้รับสิทธิ์จากห้องที่เลือก · แก้ไขกิจกรรมส่วนตัวด้านล่าง</p>
     </section>
   );
 }
