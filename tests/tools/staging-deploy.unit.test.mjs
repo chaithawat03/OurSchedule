@@ -150,8 +150,13 @@ test('PR verification checks bounded historical pages without relying on synthet
     ...successRun('PR CI','pr-ci.yml'),
     pull_requests:[{number:999,head:{sha:head},base:{ref:'main'}}],
   }));
+  // A hundred ambiguous runs on the same PR branch MUST fail closed.
   await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
     ciPages:{1:neverMatch,2:neverMatch,3:neverMatch,4:neverMatch,5:neverMatch},
+  })),/Ambiguous workflow run metadata/);
+  // Unrelated historical runs without plausible linkage are skipped safely.
+  await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
+    ciPages:{1:unrelated,2:unrelated,3:unrelated,4:unrelated,5:unrelated},
   })),/Missing passed PR CI/);
 });
 
