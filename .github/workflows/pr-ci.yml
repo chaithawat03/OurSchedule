@@ -69,6 +69,10 @@ jobs:
         run: |
           node --test tests/tools/staging-deploy.unit.test.mjs
           node --check scripts/staging-deploy/run.mjs
+      - name: Verify M4b named E2E Rules preparation cannot target default database
+        run: |
+          node --test tests/tools/m4b-named-rules.test.mjs
+          node --check scripts/m4b/prepare-named-e2e-rules.mjs
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
