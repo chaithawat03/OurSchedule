@@ -57,7 +57,14 @@ if (p2bRequested && !p2bAllowed) {
 // The runner refuses any preview build without this live runtime assertion.
 // The normal Staging and Production builds do not set this marker.
 if (p2bRequested && p2bAllowed) {
+  const builtCommit = import.meta.env.VITE_E2E_BUILD_SHA;
+  if (typeof builtCommit !== 'string' || !/^[a-f0-9]{40}$/.test(builtCommit)) {
+    throw new Error('Refusing unversioned Phase 2b preview build');
+  }
   document.documentElement.dataset.phase2bDatabase = 'ourschedule-e2e';
+  // The browser E2E job checks that the deployed preview matches the exact
+  // GitHub Actions checkout commit, not an expired/stale hosting release.
+  document.documentElement.dataset.phase2bBuildSha = builtCommit;
 }
 const auth = app ? getAuth(app) : null;
 const db = app
