@@ -36,7 +36,9 @@ export function validatePhase2bEnvironment(env) {
   assert.match(env.STAGING_E2E_API_KEY ?? '', /^[a-zA-Z0-9_-]{15,128}$/);
   assert.ok((env.GOOGLE_OAUTH_ACCESS_TOKEN ?? '').length > 50, 'Signing token missing');
   assert.ok((env.STAGING_E2E_PHASE2B_CLEANUP_TOKEN ?? '').length > 50, 'Scoped cleanup token missing');
+  assert.match(env.GITHUB_SHA ?? '', /^[a-f0-9]{40}$/, 'Missing checkout commit');
   return Object.freeze({
+    buildSha: env.GITHUB_SHA,
     origin: validatePreviewUrl(env.STAGING_E2E_PHASE2B_PREVIEW_URL),
     apiKey: env.STAGING_E2E_API_KEY,
     appId: env.STAGING_E2E_APP_ID,

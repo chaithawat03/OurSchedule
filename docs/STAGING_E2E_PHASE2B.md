@@ -82,3 +82,99 @@ References:
 - https://firebase.google.com/docs/firestore/manage-databases
 - https://firebase.google.com/docs/firestore/security/iam
 - https://firebase.google.com/docs/hosting/test-preview-deploy
+
+
+## Automated Preview refresh (new, not enabled yet)
+
+Status: SOURCE IMPLEMENTED. The Cloud Hosting deployer is NOT provisioned or verified.
+
+The workflow now refreshes the existing preview URL on the existing Firebase
+Hosting site ourschedule, channel p2b-e2e, from the EXACT CURRENT GitHub main
+commit SHA. It extends expiration 21 days and checks the actual channel URL
+and expireTime through the Firebase Hosting API. Phase2b browser refuses to
+write test rooms if the deployed preview does not embed that SHA.
+
+IMPORTANT IAM LIMITATION: Firebase Hosting does not currently support custom
+IAM roles. roles/firebasehosting.admin also grants access to the live Hosting
+site; the command's fixed Preview-only target is a defense against coding
+mistakes, not an IAM security boundary. If project policy prohibits this
+broader access, do not enable automated preview deployment.
+
+### One-time Cloud Shell steps (only after PR review)
+
+1. Switch to ourschedule and create a SEPARATE Service Account, never a JSON key:
+
+    gcloud config set project ourschedule
+    SA="e2e-preview-deployer@ourschedule.iam.gserviceaccount.com"
+    gcloud iam service-accounts describe "$SA" --project=ourschedule ||
+      gcloud iam service-accounts create e2e-preview-deployer \
+        --display-name="OurSchedule Phase2b Hosting Preview" --project=ourschedule
+
+2. Reuse the existing restricted WIF identity principal, which must still
+   require main, repository ID, staging-e2e environment and the precise
+   .github/workflows/staging-e2e.yml workflow ref.
+
+    gcloud iam service-accounts add-iam-policy-binding "$SA" \
+      --project=ourschedule --role=roles/iam.workloadIdentityUser \
+      --member="principalSet://iam.googleapis.com/projects/400176852634/locations/global/workloadIdentityPools/ourschedule-e2e/attribute.repository/chaithawat03/OurSchedule"
+
+3. Grant Firebase Hosting Admin and API Keys Viewer ONLY to this separate
+   deployer, not to Auth signer e2e-runner or Firestore cleanup e2e-cleanup.
+   Review that Hosting Admin is a broad privilege over this Hosting project.
+
+    gcloud projects add-iam-policy-binding ourschedule \
+      --member="serviceAccount:$SA" \
+      --role=roles/firebasehosting.admin
+
+    gcloud projects add-iam-policy-binding ourschedule \
+      --member="serviceAccount:$SA" \
+      --role=roles/serviceusage.apiKeysViewer
+
+    gcloud projects get-iam-policy ourschedule \
+      --flatten="bindings[]" \
+      --filter="bindings.members:e2e-preview-deployer@ourschedule.iam.gserviceaccount.com" \
+      --format="yaml(bindings.role,bindings.condition,bindings.members)"
+
+4. Set GitHub Actions repository variables:
+
+    STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT=e2e-preview-deployer@ourschedule.iam.gserviceaccount.com
+    STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED=false
+    STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED=false
+
+   Continue using the existing STAGING_E2E_PHASE2B_PREVIEW_URL unchanged.
+   Never add user OAuth tokens, long-lived tokens, or service-account JSON keys.
+
+5. After a separate review and merge, switch the last two new flags to true.
+   Start a NEW Staging E2E workflow_dispatch on main. No manual Cloud Shell
+   preview build is required afterward. The actual job dependency sequence is:
+
+    Phase2a read-isolation
+          -> Preview-only refresh/build
+          -> Phase2b live hosted UI + named Firestore cleanup
+
+6. Accept only if all jobs are successful and the preview refresh log, Phase2b
+   private Rules assertions, named database cleanup, and both synthetic Auth
+   reconciliations pass. Validate expiry has moved ~21 days into the future.
+   If any step fails, the dependent Phase2b job is skipped, not permitted to
+   run against an outdated preview build. Phase2a remains independent.
+
+### Fail-closed details
+
+- The deployer exists only in a canonical main workflow gated by explicit
+  opt-in flags; no pull-request workflow can exchange Hosting credentials.
+- npm install and Vite build happen BEFORE exchanging Hosting credentials.
+- Deployment is literal hosting:channel:deploy p2b-e2e --expires 21d with
+  project ourschedule and a config containing hosting.site = ourschedule.
+  It never runs generic firebase deploy or targets live.
+- Preflight GET refuses missing, expired, moved, or unversioned channels.
+  Firebase CLI JSON and postflight GET must confirm the exact expected URL
+  and at least 20 days remaining. New channel creation is not allowed.
+- The browser checks the deployed SHA equals github.sha before UI writes.
+- Disable STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED and
+  STAGING_E2E_PHASE2B_ENABLED if the automation is unhealthy. On an incident,
+  revoke the deployer WIF binding or Hosting Admin role.
+
+Sources:
+- https://firebase.google.com/docs/hosting/manage-hosting-resources
+- https://firebase.google.com/docs/projects/iam/permissions
+- https://firebase.google.com/docs/reference/hosting/rest/v1beta1/sites.channels/get

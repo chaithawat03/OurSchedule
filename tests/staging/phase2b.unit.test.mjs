@@ -30,6 +30,7 @@ const inbox={path:'users/'+MEMBER_UID+'/roomActivityInvites/event_1',document:do
 const validVars=Object.freeze({
   GITHUB_REPOSITORY:'chaithawat03/OurSchedule',GITHUB_REF:'refs/heads/main',
   GITHUB_EVENT_NAME:'workflow_dispatch',
+  GITHUB_SHA:'a'.repeat(40),
   STAGING_E2E_ENABLED:'true',STAGING_E2E_APPROVE_PERSISTENT_PROFILES:'true',
   STAGING_E2E_PHASE2B_ENABLED:'true',STAGING_E2E_PHASE2B_DELETE_APPROVED:'true',
   STAGING_E2E_SERVICE_ACCOUNT:'e2e-runner@ourschedule.iam.gserviceaccount.com',
@@ -161,4 +162,78 @@ test('live test selects removable member, not ambiguous shared UID prefix',()=>{
     'prepare-revocation','member-revocation','revocation-rules-denials']) {
     assert.ok(src.includes("checkpoint('"+stage+"')"),'Missing checkpoint: '+stage);
   }
+});
+
+
+test('preview refresh uses ONLY canonical OIDC workflow, pinned Hosting URL and separate deployer',async()=>{
+  const {validateRefreshEnvironment,validateRefreshConfig}=await import(
+    '../../scripts/staging-e2e/phase2b/preview-refresh.mjs');
+  const valid={
+    ...validVars,
+    GITHUB_WORKFLOW_REF:'chaithawat03/OurSchedule/.github/workflows/staging-e2e.yml@refs/heads/main',
+    STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED:'true',
+    STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED:'true',
+    STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT:
+      'e2e-preview-deployer@ourschedule.iam.gserviceaccount.com',
+  };
+  assert.equal(validateRefreshEnvironment(valid).sha,'a'.repeat(40));
+  for(const [key,value] of [
+    ['GITHUB_WORKFLOW_REF','another.yml@refs/heads/main'],
+    ['GITHUB_REF','refs/heads/work'],
+    ['STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED','false'],
+    ['STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED','false'],
+    ['STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT',
+      'e2e-cleanup@ourschedule.iam.gserviceaccount.com'],
+    ['STAGING_E2E_PHASE2B_PREVIEW_URL','https://ourschedule.web.app'],
+    ['GITHUB_SHA','not-a-commit'],
+  ])assert.throws(()=>validateRefreshEnvironment({...valid,[key]:value}));
+  const config=JSON.parse(readFileSync('firebase.phase2b.json','utf8'));
+  validateRefreshConfig(config);
+  assert.throws(()=>validateRefreshConfig({...config,hosting:{...config.hosting,site:'other'}}));
+  assert.throws(()=>validateRefreshConfig({...config,
+    hosting:{...config.hosting,rewrites:[{source:'**',function:'privilegedFunction'}]}}));
+});
+
+test('preview refresh verifies current release, URL, expiry and updated channel',async()=>{
+  const {validatePreviewChannel,validateCliResult,readPreviewChannel}=await import(
+    '../../scripts/staging-e2e/phase2b/preview-refresh.mjs');
+  const origin='https://ourschedule--p2b-e2e-1vi1znb5.web.app';
+  const now=Date.now();
+  const channel={
+    name:'sites/ourschedule/channels/p2b-e2e',
+    url:origin,
+    release:{version:{name:'sites/ourschedule/versions/c049953bbf5c73e8'}},
+    expireTime:new Date(now+21*86400_000).toISOString(),
+  };
+  assert.ok(validatePreviewChannel(channel,origin,now,true));
+  assert.throws(()=>validatePreviewChannel({...channel,url:'https://ourschedule.web.app'},origin,now));
+  assert.throws(()=>validatePreviewChannel({...channel,name:'sites/ourschedule/channels/live'},origin,now));
+  assert.throws(()=>validatePreviewChannel({...channel,expireTime:new Date(now+1*86400_000).toISOString()},origin,now,true));
+  assert.throws(()=>validatePreviewChannel({...channel,release:{}},origin,now));
+  const stdout=JSON.stringify({status:'success',result:{default:{
+    site:'ourschedule',url:origin,expireTime:channel.expireTime,
+  }}});
+  validateCliResult(stdout,origin);
+  assert.throws(()=>validateCliResult(stdout,'https://ourschedule--p2b-e2e-wrong.web.app'));
+  const result=await readPreviewChannel('x'.repeat(75),async (url,init)=>{
+    assert.equal(url,'https://firebasehosting.googleapis.com/v1beta1/sites/ourschedule/channels/p2b-e2e');
+    assert.equal(init.headers.authorization,'Bearer '+'x'.repeat(75));
+    return {ok:true,json:async()=>channel};
+  });
+  assert.equal(result.url,origin);
+});
+
+test('live browser checks exact current commit, and refresh precedes all Phase2b writes',()=>{
+  const code=readFileSync('src/services/firebaseClient.ts','utf8');
+  const runner=readFileSync('scripts/staging-e2e/phase2b/run.mjs','utf8');
+  const workflow=readFileSync('.github/workflows/staging-e2e.yml','utf8');
+  const refresh=readFileSync('scripts/staging-e2e/phase2b/preview-refresh.mjs','utf8');
+  assert.match(code,/dataset\.phase2bBuildSha = builtCommit/);
+  assert.match(runner,/data-phase2b-build-sha',opts\.buildSha/);
+  assert.match(workflow,/needs: \[staging-read-isolation, staging-preview-refresh\]/);
+  assert.match(workflow,/VITE_E2E_BUILD_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow,/create_credentials_file: true/);
+  assert.match(refresh,/'hosting:channel:deploy',CHANNEL/);
+  assert.doesNotMatch(refresh,/'firebase-tools','deploy'/);
+  assert.match(refresh,/'--expires','21d'/);
 });

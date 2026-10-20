@@ -49,6 +49,8 @@ async function createSession(browser, opts, code, uid, contexts) {
   assert.equal(session.uid,uid,'Wrong test identity');
   await page.goto(opts.origin+'/',{waitUntil:'domcontentloaded'});
   await expect(page.locator('html')).toHaveAttribute('data-phase2b-database',DATABASE_ID);
+  // Detect missing/stale preview deployments BEFORE any room or activity write.
+  await expect(page.locator('html')).toHaveAttribute('data-phase2b-build-sha',opts.buildSha);
   await expect(page.getByText(/เชื่อมต่อบัญชีแล้ว:/)).toBeVisible({timeout:30000});
   return {page,context,idToken:session.idToken,uid};
 }
