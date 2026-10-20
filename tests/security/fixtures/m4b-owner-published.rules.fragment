@@ -1,0 +1,53 @@
+    // EXPERIMENT ONLY: inserted into the Firestore Emulator by M4b tests.
+    // NOT in production firestore.rules. This collection is new and empty.
+    // Unlike an event-derived projection, each entry is an independently
+    // and deliberately published room appointment with NO link to PRIVATE.
+    function m4bRoomPath(roomId) {
+      return /databases/$(database)/documents/rooms/$(roomId);
+    }
+
+    function m4bCanReadPublished(roomId) {
+      return signedIn() && exists(m4bRoomPath(roomId))
+        && (get(m4bRoomPath(roomId)).data.ownerUid == request.auth.uid
+          || activeMembership(roomId, request.auth.uid));
+    }
+
+    function m4bValidSharedEntry(data, roomId) {
+      return data.keys().hasAll(['roomId','visibility','startAt','endAt','allDay'])
+        && (data.visibility == 'ROOM'
+          ? data.keys().hasOnly(['roomId','visibility','startAt','endAt','allDay','title'])
+            && data.keys().hasAll(['title'])
+            && data.title is string
+            && data.title.size() > 0 && data.title.size() <= 120
+          : data.visibility == 'BUSY_ONLY'
+            && data.keys().hasOnly(['roomId','visibility','startAt','endAt','allDay']))
+        && data.roomId == roomId
+        && data.startAt is timestamp && data.endAt is timestamp
+        && data.endAt > data.startAt
+        && data.endAt <= data.startAt + duration.value(1, 'd')
+        && data.allDay is bool;
+    }
+
+    match /rooms/{roomId}/sharedCalendarV1/{entryId} {
+      // A new, isolated namespace prevents accidentally publishing older
+      // PRIVATE event records or pre-existing calendarProjections documents.
+      allow get: if m4bCanReadPublished(roomId)
+        && m4bValidSharedEntry(resource.data, roomId);
+      // List grants depend on the trust invariant that all entries here were
+      // created via the strict owner-only schema. ADMIN-SDK BYPASS CAN BREAK
+      // THAT INVARIANT; do not deploy until trusted writers are audited.
+      allow list: if m4bCanReadPublished(roomId)
+        && request.query.limit != null && request.query.limit <= 20;
+      allow create: if signedIn()
+        && exists(m4bRoomPath(roomId))
+        && get(m4bRoomPath(roomId)).data.ownerUid == request.auth.uid
+        && entryId.size() > 0 && entryId.size() <= 60
+        && roomId.size() > 0 && roomId.size() <= 50
+        && m4bValidSharedEntry(request.resource.data, roomId)
+        && quotaConsumed(request.auth.uid,'roomEvents',
+             'shared_' + roomId + '_' + entryId,20);
+      allow update: if false; // immutable; never transform a PRIVATE item
+      allow delete: if signedIn() && exists(m4bRoomPath(roomId))
+        && get(m4bRoomPath(roomId)).data.ownerUid == request.auth.uid;
+      match /{nested=**} { allow read, write: if false; }
+    }
