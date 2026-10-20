@@ -1,0 +1,105 @@
+name: Staging Hosting Auto Deploy
+
+# Auto-release only merged, checked main commits. Manual dispatch is available
+# to retry the CURRENT main commit; it cannot deploy arbitrary old refs.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ourschedule-staging-hosting-live
+  cancel-in-progress: false
+
+jobs:
+  verify-reviewed-merge:
+    if: >-
+      github.repository == 'chaithawat03/OurSchedule' &&
+      github.ref == 'refs/heads/main' &&
+      vars.STAGING_AUTO_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging-deploy
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify merged main commit and both PR workflow conclusions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STAGING_AUTO_DEPLOY_ENABLED: ${{ vars.STAGING_AUTO_DEPLOY_ENABLED }}
+          STAGING_AUTO_DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_AUTO_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_AUTO_DEPLOY_WIF_PROVIDER: ${{ vars.STAGING_AUTO_DEPLOY_WIF_PROVIDER }}
+        run: node scripts/staging-deploy/run.mjs verify
+
+  deploy-staging-hosting:
+    needs: verify-reviewed-merge
+    if: >-
+      github.repository == 'chaithawat03/OurSchedule' &&
+      github.ref == 'refs/heads/main' &&
+      vars.STAGING_AUTO_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging-deploy
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      id-token: write
+    env:
+      STAGING_AUTO_DEPLOY_ENABLED: ${{ vars.STAGING_AUTO_DEPLOY_ENABLED }}
+      STAGING_AUTO_DEPLOY_SERVICE_ACCOUNT: ${{ vars.STAGING_AUTO_DEPLOY_SERVICE_ACCOUNT }}
+      STAGING_AUTO_DEPLOY_WIF_PROVIDER: ${{ vars.STAGING_AUTO_DEPLOY_WIF_PROVIDER }}
+      VITE_FIREBASE_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ourschedule.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: ourschedule
+      VITE_FIREBASE_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+      VITE_RECAPTCHA_V3_SITE_KEY: ${{ vars.STAGING_RECAPTCHA_V3_SITE_KEY }}
+      VITE_E2E_EMULATORS: '0'
+      VITE_PHASE2B_PREVIEW: '0'
+      VITE_PHASE2B_DATABASE_ID: ''
+      VITE_E2E_BUILD_SHA: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate Staging-only config and Firebase Web App
+        run: node scripts/staging-deploy/run.mjs validate-build
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build Staging Hosting (without cloud credentials)
+        run: npm run build
+      - name: Embed reviewed commit version in deployed files
+        run: node scripts/staging-deploy/run.mjs stamp
+      - name: Verify main has not moved since approval
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging-deploy/run.mjs latest
+      - name: Exchange GitHub OIDC for dedicated Staging deployer
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.STAGING_AUTO_DEPLOY_WIF_PROVIDER }}
+          service_account: ${{ vars.STAGING_AUTO_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Deploy ONLY ourschedule STAGING Hosting and verify live SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/staging-deploy/run.mjs deploy
