@@ -39,8 +39,30 @@ const emulatorAllowed = import.meta.env.DEV
 if (emulatorRequested && !emulatorAllowed) {
   throw new Error('Refusing E2E emulator mode outside the isolated local demo project');
 }
+// Phase 2b runs a real Firebase Hosting PREVIEW build against a dedicated
+// named Firestore database. Refuse the preview flag on the live Staging host,
+// localhost, any other project or any unrelated preview channel.
+const p2bRequested = import.meta.env.VITE_PHASE2B_PREVIEW === '1';
+const p2bAllowed = import.meta.env.PROD
+  && config.projectId === 'ourschedule'
+  && config.authDomain === 'ourschedule.firebaseapp.com'
+  && typeof config.appId === 'string'
+  && config.appId.startsWith('1:400176852634:web:')
+  && import.meta.env.VITE_PHASE2B_DATABASE_ID === 'ourschedule-e2e'
+  && typeof window !== 'undefined'
+  && /^ourschedule--p2b-e2e-[a-z0-9-]+\.web\.app$/.test(window.location.hostname);
+if (p2bRequested && !p2bAllowed) {
+  throw new Error('Refusing Phase 2b outside its named database and Hosting preview');
+}
+// The runner refuses any preview build without this live runtime assertion.
+// The normal Staging and Production builds do not set this marker.
+if (p2bRequested && p2bAllowed) {
+  document.documentElement.dataset.phase2bDatabase = 'ourschedule-e2e';
+}
 const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
+const db = app
+  ? (p2bRequested ? getFirestore(app, 'ourschedule-e2e') : getFirestore(app))
+  : null;
 if (emulatorRequested && auth && db) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);

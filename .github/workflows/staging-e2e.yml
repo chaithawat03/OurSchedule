@@ -54,3 +54,63 @@ jobs:
           STAGING_E2E_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_SERVICE_ACCOUNT }}
           GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: node scripts/staging-e2e/run.mjs
+
+
+  # Phase 2b is an independent, double-opt-in job. It never runs from a PR;
+  # waiting for the verified Phase 2a job prevents concurrent use of fixed UIDs.
+  # Its cleanup OAuth token MUST belong to a different SA with conditional
+  # Firestore IAM access to database ourschedule-e2e ONLY.
+  staging-room-activity-preview:
+    needs: staging-read-isolation
+    if: >-
+      github.repository == 'chaithawat03/OurSchedule' &&
+      github.ref == 'refs/heads/main' &&
+      vars.STAGING_E2E_PHASE2B_ENABLED == 'true' &&
+      vars.STAGING_E2E_PHASE2B_DELETE_APPROVED == 'true'
+    environment: staging-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install exact locked packages
+        run: npm ci --no-audit --no-fund
+      - name: Install isolated browser
+        run: npx playwright install --with-deps chromium
+      - name: Exchange OIDC for synthetic Firebase token signer
+        id: signer
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.STAGING_E2E_WIF_PROVIDER }}
+          service_account: ${{ vars.STAGING_E2E_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Exchange OIDC for NAMED-DATABASE-ONLY cleanup
+        id: cleanup
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.STAGING_E2E_WIF_PROVIDER }}
+          service_account: ${{ vars.STAGING_E2E_PHASE2B_CLEANUP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/datastore
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Full two-user live UI acceptance and scoped cleanup
+        env:
+          STAGING_E2E_ENABLED: ${{ vars.STAGING_E2E_ENABLED }}
+          STAGING_E2E_APPROVE_PERSISTENT_PROFILES: ${{ vars.STAGING_E2E_APPROVE_PERSISTENT_PROFILES }}
+          STAGING_E2E_PHASE2B_ENABLED: ${{ vars.STAGING_E2E_PHASE2B_ENABLED }}
+          STAGING_E2E_PHASE2B_DELETE_APPROVED: ${{ vars.STAGING_E2E_PHASE2B_DELETE_APPROVED }}
+          STAGING_E2E_PHASE2B_PREVIEW_URL: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_URL }}
+          STAGING_E2E_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+          STAGING_E2E_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+          STAGING_E2E_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_SERVICE_ACCOUNT }}
+          STAGING_E2E_PHASE2B_CLEANUP_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_PHASE2B_CLEANUP_SERVICE_ACCOUNT }}
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.signer.outputs.access_token }}
+          STAGING_E2E_PHASE2B_CLEANUP_TOKEN: ${{ steps.cleanup.outputs.access_token }}
+        run: node scripts/staging-e2e/phase2b/run.mjs
