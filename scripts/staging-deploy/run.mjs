@@ -80,14 +80,20 @@ export function parseMergedPr(prs,sha) {
 
 export function verifiedWorkflowRun(runs,workflow,pr) {
   assert.ok(Array.isArray(runs),'Invalid workflow runs response');
+  // For pull_request events, Actions run.head_sha points to GitHub's
+  // synthetic refs/pull/N/merge commit, not the PR HEAD commit. The exact
+  // PR head is instead provided inside run.pull_requests[].head.sha.
+  // Do not allow an earlier green run of the same PR to authorize a new head.
   return runs.some(run =>
     run.name===workflow.name &&
     run.path==='.github/workflows/'+workflow.filename &&
     run.event==='pull_request' &&
     run.status==='completed' && run.conclusion==='success' &&
-    run.head_sha===pr.head.sha &&
     Array.isArray(run.pull_requests) &&
-    run.pull_requests.some(p=>p.number===pr.number)
+    run.pull_requests.some(p =>
+      p.number===pr.number &&
+      p.head?.sha===pr.head.sha &&
+      p.base?.ref==='main')
   );
 }
 
