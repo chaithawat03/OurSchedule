@@ -25,6 +25,15 @@ export function nextBangkokDay(day: string): string {
   return bangkokDayKey(new Date(date.getTime() + DAY_MS));
 }
 
+export function shiftBangkokDay(day: string, offset: number): string {
+  if (!Number.isSafeInteger(offset)) throw new RangeError('Invalid day offset');
+  // Fixed Asia/Bangkok offset means 24-hour increments are unambiguous.
+  const start = bangkokInstant(day + 'T00:00').getTime();
+  const shifted = new Date(start + offset * DAY_MS);
+  if (!Number.isFinite(shifted.getTime())) throw new RangeError('Invalid day');
+  return bangkokDayKey(shifted);
+}
+
 export function monthReadWindow(year: number, monthIndex: number, multi = false) {
   const start = new Date(Date.UTC(year, monthIndex, 1) - BANGKOK_OFFSET_MS);
   const end = new Date(Date.UTC(year, monthIndex + (multi ? 2 : 1), 1) - BANGKOK_OFFSET_MS);

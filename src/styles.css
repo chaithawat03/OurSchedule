@@ -40,3 +40,19 @@
 .room-activity-list button,.room-activity-details button{background:#245a76;color:white;border:0;border-radius:8px;min-height:38px;padding:8px 12px;font-size:12px;font-weight:650}
 .room-activity-details{padding:14px;border:1px solid #dce7f0;border-radius:10px}
 @media(max-width:570px){.room-activity-list li{align-items:flex-start;flex-direction:column}.room-activity-list .personal-actions{width:100%}}
+
+/* M4: daily agenda is a READ-ONLY projection of the signed-in user's
+   personal events; activity writes continue through PersonalActivityPanel. */
+.day-agenda{background:white;border:1px solid #dfe9f1;border-radius:14px;padding:clamp(15px,3vw,24px);box-shadow:0 5px 23px #1d3a560a}
+.day-agenda-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.day-agenda-heading h2{margin:0;font-size:clamp(17px,2.5vw,22px)}
+.day-agenda-message,.day-agenda-helper{font-size:12px;line-height:1.7;color:#637f91}
+.day-agenda-helper{margin:18px 0 0;border-top:1px solid #eaf0f5;padding-top:12px}
+.day-agenda-list{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.day-agenda-item{display:grid;grid-template-columns:minmax(95px,130px) minmax(0,1fr);gap:14px;align-items:flex-start;background:#f7fbfd;border:1px solid #e1eaf2;border-radius:10px;padding:13px}
+.day-agenda-time{font-variant-numeric:tabular-nums;color:#205372;font-size:13px;font-weight:750;white-space:nowrap}
+.day-agenda-details{min-width:0;overflow-wrap:anywhere}
+.day-agenda-details strong{font-size:14px;color:#203b50}
+.day-agenda-details p{font-size:12px;color:#557184;line-height:1.5;margin:6px 0}
+.day-agenda-details small{display:block;margin-top:6px;color:#6f8596;font-size:11px}
+@media(max-width:470px){.day-agenda-item{grid-template-columns:1fr;gap:5px}.day-agenda-time{font-size:12px}}

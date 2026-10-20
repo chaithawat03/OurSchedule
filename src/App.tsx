@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import PersonalActivityPanel from './features/activity/PersonalActivityPanel';
+import DayAgenda from './features/activity/DayAgenda';
 import { listPersonalActivities, type PersonalActivity } from './services/personalActivities';
-import { overlapsDay } from './lib/activityDates';
+import { overlapsDay, shiftBangkokDay } from './lib/activityDates';
 import IdentityPanel from './features/identity/IdentityPanel';
 import RoomPanel from './features/rooms/RoomPanel';
 import { useIdentity } from './features/identity/useIdentity';
@@ -47,6 +48,15 @@ export default function App() {
     setSelected([next.year, String(next.monthIndex + 1).padStart(2, '0'), '01'].join('-'));
     return next;
   });
+  const selectDay = (date: string) => {
+    setSelected(date);
+    const [year, month] = date.split('-').map(Number);
+    // Selecting a calendar overflow cell must load its actual month.
+    if (year !== cursor.year || month - 1 !== cursor.monthIndex) {
+      setCursor({ year, monthIndex: month - 1 });
+    }
+  };
+  const navigateDay = (delta: number) => selectDay(shiftBangkokDay(selected, delta));
   const nextMonth = shiftMonth(cursor.year, cursor.monthIndex, 1);
   const user = identity.state.status === 'ready' ? identity.state.user : null;
   const [events, setEvents] = useState<PersonalActivity[]>([]);
@@ -88,23 +98,23 @@ export default function App() {
           <RoomPanel user={identity.state.status === 'ready' ? identity.state.user : null} />
           <div className="toolbar">
             <div className="nav-month">
-              <button type="button" onClick={() => navigate(-1)} aria-label="เดือนก่อนหน้า">‹</button>
+              <button type="button" onClick={() => view === 'day' ? navigateDay(-1) : navigate(-1)}
+                aria-label={view === 'day' ? 'วันก่อนหน้า' : 'เดือนก่อนหน้า'}>‹</button>
               <button type="button" onClick={() => { setCursor({ year: today.year, monthIndex: today.monthIndex }); setSelected([today.year, String(today.monthIndex + 1).padStart(2, '0'), String(today.day).padStart(2, '0')].join('-')); }}>วันนี้</button>
-              <button type="button" onClick={() => navigate(1)} aria-label="เดือนถัดไป">›</button>
+              <button type="button" onClick={() => view === 'day' ? navigateDay(1) : navigate(1)}
+                aria-label={view === 'day' ? 'วันถัดไป' : 'เดือนถัดไป'}>›</button>
             </div>
             <div className="view-switch" aria-label="รูปแบบปฏิทิน">
               {(Object.keys(viewNames) as View[]).map((key) => <button type="button" key={key} aria-pressed={key === view} className={view === key ? 'active' : ''} onClick={() => setView(key)}>{viewNames[key]}</button>)}
             </div>
           </div>
           {view === 'day' ? (
-            <section className="empty-state">
-              <p className="eyebrow">DAY VIEW</p><h2>{dateHeading}</h2><p>เลือกวันที่เพื่อดูหรือสร้างกิจกรรมด้านล่าง</p>
-              <button type="button" onClick={() => setView('month')}>กลับสู่รายเดือน</button>
-            </section>
+            <DayAgenda day={selected} heading={dateHeading} events={events} busy={eventsBusy}
+              error={eventsError} truncated={truncated} userReady={Boolean(user)} />
           ) : (
             <div className={'calendar-layout' + (view === 'multi' ? ' multi' : '')}>
-              <Month year={cursor.year} monthIndex={cursor.monthIndex} selected={selected} onSelect={setSelected} events={events} />
-              {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={setSelected} events={events} />}
+              <Month year={cursor.year} monthIndex={cursor.monthIndex} selected={selected} onSelect={selectDay} events={events} />
+              {view === 'multi' && <Month year={nextMonth.year} monthIndex={nextMonth.monthIndex} selected={selected} onSelect={selectDay} events={events} />}
             </div>
           )}
           <PersonalActivityPanel key={user?.uid ?? 'signed-out'} user={user} day={selected}
