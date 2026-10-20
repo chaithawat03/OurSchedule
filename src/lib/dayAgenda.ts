@@ -14,7 +14,7 @@ export interface DayAgendaEntry {
  * This does not query or project any shared-room/private-member data.
  * The event title and notes are read only from the signed-in user's own data.
  */
-export function personalDayAgenda(events: PersonalActivity[], day: string): DayAgendaEntry[] {
+export function personalDayAgenda<T extends PersonalActivity>(events: T[], day: string): Array<DayAgendaEntry & {activity:T}> {
   const begin = bangkokInstant(day + 'T00:00').getTime();
   const next = bangkokInstant(nextBangkokDay(day) + 'T00:00').getTime();
   return events.filter((item) =>
