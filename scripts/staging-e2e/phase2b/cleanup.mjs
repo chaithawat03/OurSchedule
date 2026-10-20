@@ -17,7 +17,7 @@ const VALID_SEGMENT = /^[A-Za-z0-9_-]{1,128}$/;
 const ALLOWED_ROOT = new Set(['users', 'rooms', 'roomInvites']);
 const CHILD_COLLECTIONS = Object.freeze({
   users: new Set(['quotas', 'roomActivityInvites']),
-  rooms: new Set(['members', 'events']),
+  rooms: new Set(['members', 'events', 'sharedCalendarV1']),
 });
 
 export function validateCleanupDocument(path, doc, roomIds = new Set()) {
@@ -54,6 +54,34 @@ export function validateCleanupDocument(path, doc, roomIds = new Set()) {
       assert.equal(FIELD(doc, 'uid'), childId);
       return;
     }
+    // M4b scoped preflight/teardown. Only TWO deterministic entries created
+    // by the synthetic live E2E runner can be deleted. Admin-seeded or
+    // unrelated calendar records cause FAIL CLOSED before any delete.
+    if (child === 'sharedCalendarV1') {
+      assert.match(childId, /^P2B-M4B-(ROOM|BUSY)-[A-Za-z0-9_-]{1,48}$/,
+        'Refusing unrelated shared calendar ID');
+      const fields=doc.fields ?? {};
+      const visibility=FIELD(doc,'visibility');
+      assert.ok(['ROOM','BUSY_ONLY'].includes(visibility),'Invalid M4b visibility');
+      const common=['roomId','visibility','startAt','endAt','allDay'];
+      const expected=visibility==='ROOM'?[...common,'title']:common;
+      assert.deepEqual(Object.keys(fields).sort(),expected.sort(),
+        'Refusing private metadata in shared entry');
+      assert.equal(FIELD(doc,'roomId'),id,'M4b shared entry belongs to another room');
+      assert.ok(fields.startAt?.timestampValue && fields.endAt?.timestampValue,
+        'M4b shared entry missing timestamps');
+      const start=Date.parse(fields.startAt.timestampValue);
+      const end=Date.parse(fields.endAt.timestampValue);
+      assert.ok(Number.isFinite(start)&&Number.isFinite(end)&&
+        end>start&&end-start<=86400000,'Invalid M4b time range');
+      assert.ok(typeof fields.allDay?.booleanValue==='boolean','Invalid allDay');
+      if (visibility==='ROOM') {
+        assert.ok(FIELD(doc,'title')?.startsWith('P2B-M4B-ROOM-'),
+          'Refusing unrelated shared title');
+        assert.ok(FIELD(doc,'title').length<=120,'Oversized title');
+      }
+      return;
+    }
     assert.equal(child, 'events', 'Unexpected room subcollection');
     assert.equal(FIELD(doc, 'creatorUid'), OWNER_UID);
     assert.equal(FIELD(doc, 'recipientUid'), MEMBER_UID);
@@ -85,6 +113,12 @@ export function validateInventoryDocuments(items) {
   assert.ok((counts.get('events') ?? 0) <= 3, 'Unexpected event count');
   assert.ok((counts.get('roomActivityInvites') ?? 0) <= 3, 'Unexpected inbox count');
   assert.ok((counts.get('members') ?? 0) <= 2, 'Unexpected membership count');
+  assert.ok((counts.get('sharedCalendarV1') ?? 0) <= 2,
+    'Unexpected M4b shared entry count');
+  const published=items.filter(({path})=>path.includes('/sharedCalendarV1/'));
+  assert.ok(published.every(({path})=>path.startsWith('rooms/'+
+    [...roomIds][0]+'/sharedCalendarV1/')),
+    'M4b entry linked to another room');
   return [...items].sort((a,b) =>
     b.path.split('/').length - a.path.split('/').length ||
     a.path.localeCompare(b.path));
