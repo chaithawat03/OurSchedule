@@ -14,3 +14,6 @@ service-account*.json
 
 playwright-report/
 test-results/
+
+# Experimental generated named-E2E Rules (never committed or live deployed)
+.firebase-m4b-generated/
