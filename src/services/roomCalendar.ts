@@ -5,6 +5,7 @@ import {
   listRoomActivityInvitations,
 } from './roomActivities';
 import { monthReadWindow } from '../lib/activityDates';
+import { listRoomMembers } from './invitations';
 import { activeCalendarRooms, ROOM_CALENDAR_LIMIT,
   type CalendarRoom, type CalendarEvent } from '../lib/unifiedCalendar';
 
