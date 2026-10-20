@@ -86,6 +86,7 @@ export async function listPrivateRoomCalendar(
     events.filter(event=>
       event.status==='active' &&
       event.assignmentState==='ACCEPTED' &&
+      activeMemberUids.has(event.recipientUid) &&
       event.start<end && event.end>start &&
       event.start<end && event.end>scanStart
     ).map(event=>({
