@@ -111,6 +111,14 @@ export function verifiedWorkflowRun(runs,workflow,pr) {
 export async function verifyWorkflowRunSource(run,workflow,pr,env=process.env,fetchImpl=fetch) {
   if(!workflowRunMatchesIdentity(run,workflow))return false;
   if(verifiedWorkflowRun([run],workflow,pr))return true;
+  // If GitHub supplies associations, conflicting PR number/head/base metadata
+  // is explicit evidence against this run. Never override it via ancestry.
+  if(Array.isArray(run.pull_requests)&&run.pull_requests.length){
+    const matching=run.pull_requests.filter(p=>p.number===pr.number);
+    if(matching.length===0 ||
+        matching.some(p=>p.head?.sha && p.head.sha!==pr.head.sha) ||
+        matching.some(p=>p.base?.ref && p.base.ref!=='main'))return false;
+  }
   // A deleted source branch can make run.head_branch null. A bounded
   // PR-lifetime time match ONLY nominates a run for ancestry verification;
   // it never by itself counts as a passing CI run.
