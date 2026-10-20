@@ -30,6 +30,7 @@ const inbox={path:'users/'+MEMBER_UID+'/roomActivityInvites/event_1',document:do
 const validVars=Object.freeze({
   GITHUB_REPOSITORY:'chaithawat03/OurSchedule',GITHUB_REF:'refs/heads/main',
   GITHUB_EVENT_NAME:'workflow_dispatch',
+  GITHUB_SHA:'a'.repeat(40),
   STAGING_E2E_ENABLED:'true',STAGING_E2E_APPROVE_PERSISTENT_PROFILES:'true',
   STAGING_E2E_PHASE2B_ENABLED:'true',STAGING_E2E_PHASE2B_DELETE_APPROVED:'true',
   STAGING_E2E_SERVICE_ACCOUNT:'e2e-runner@ourschedule.iam.gserviceaccount.com',
