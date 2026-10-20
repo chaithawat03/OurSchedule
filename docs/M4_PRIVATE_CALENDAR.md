@@ -23,12 +23,14 @@ No new Rules, IAM permissions, indexes, database migration or profile reads:
 - Owner: list only `rooms/{roomId}/events` with `creatorUid == auth.uid`,
   max 20 documents per room; currently uses the existing function that
   retrieves the Owner's paired recipient inbox status. Show only active,
-  ACCEPTED items; PENDING/DECLINED are not confirmed appointments.
+  ACCEPTED items when the intended recipient is STILL an active room member;
+  PENDING/DECLINED/revoked are not confirmed appointments.
 - Member: query **only** `users/{currentUID}/roomActivityInvites`, max 20.
   Require a current active joined-room membership from the bounded
   `collectionGroup(members)` query; for each ACCEPTED in-window item,
   fetch event by **direct document GET**. Server Rules enforce recipient UID,
-  membership state, acceptance and non-cancelled status again. Permission
+  membership state, acceptance and non-cancelled status again via
+  getDocFromServer, never a potentially stale offline cache. Permission
   denial from revoked membership is intentionally discarded, never rendered.
 - Other errors abort the room calendar load rather than reuse previously
   cached private data. The personal calendar still operates independently.
