@@ -10,6 +10,7 @@ import { chromium, expect } from '@playwright/test';
 import { validatePhase2bEnvironment, OWNER_UID, MEMBER_UID, PROJECT_ID, DATABASE_ID } from './guard.mjs';
 import { cleanIsolatedDatabase } from './cleanup.mjs';
 import { mintFirebaseCustomToken, reconcileSyntheticAuthUser } from '../identity.mjs';
+import {m4bLiveEnabled,runM4bPublishedAcceptance,assertM4bRevocation} from '../m4b/acceptance.mjs';
 
 const BOOTSTRAP_PATH = '/__phase2b_auth_bootstrap__';
 const DB_ROOT = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID +
@@ -128,7 +129,7 @@ async function assignment(owner,member,roomId,title,decision,checkpoint) {
   return eventId;
 }
 
-async function acceptTestFlow(owner,member,checkpoint) {
+async function acceptTestFlow(owner,member,checkpoint,m4b) {
   checkpoint('room-create');
   const tag='P2B-E2E-'+Date.now().toString(36);
   await owner.page.getByRole('textbox',{name:'ชื่อห้องใหม่'}).fill(tag);
@@ -150,6 +151,13 @@ async function acceptTestFlow(owner,member,checkpoint) {
   await member.page.getByRole('button',{name:'เข้าร่วมห้อง'}).click();
   await expect(member.page.getByText('เข้าร่วมห้องสำเร็จ')).toBeVisible();
   await expect(member.page.getByText('คุณเข้าร่วม: '+tag)).toBeVisible();
+
+  // Extra M4b acceptance is MANUAL-ONLY, requires independently reviewed
+  // named-database Rules, and uses user ID tokens (not IAM admin tokens).
+  if(m4b){
+    checkpoint('m4b-explicit-publishing');
+    await runM4bPublishedAcceptance(owner.idToken,member.idToken,roomId);
+  }
 
   const prefix='P2B-E2E-'+Date.now().toString(36);
   checkpoint('accept-private-activity');
@@ -189,10 +197,18 @@ async function acceptTestFlow(owner,member,checkpoint) {
   await expect.poll(()=>firestoreGet(member.idToken,['rooms',roomId,'events',revoked]))
     .toBe(403);
   assert.equal(await firestoreGet(member.idToken,['rooms',roomId]),403);
+  if(m4b){
+    checkpoint('m4b-revoked-member-read-denial');
+    await assertM4bRevocation(owner.idToken,member.idToken,roomId);
+    console.log('PHASE 2B M4B: synthetic ROOM/BUSY_ONLY publication and revoke PASS');
+  }
 }
 
 async function main() {
   const opts=validatePhase2bEnvironment(process.env);
+  // Invalid M4b opt-in fails BEFORE creating test identities or cleaning DB.
+  const m4b=m4bLiveEnabled(process.env);
+  if(m4b)console.log('PHASE 2B M4B: manual named-Rules acceptance enabled');
   // Fail before creating even ONE test account if cleanup IAM/inventory unsafe.
   const stale=await cleanIsolatedDatabase(opts.cleanupToken);
   console.log('PHASE 2B: named database preflight cleanup PASS (count='+stale+')');
@@ -206,7 +222,7 @@ async function main() {
     const owner=await createSession(browser,opts,code,OWNER_UID,contexts);
     checkpoint('member-browser-bootstrap');
     const member=await createSession(browser,opts,code,MEMBER_UID,contexts);
-    await acceptTestFlow(owner,member,checkpoint);
+    await acceptTestFlow(owner,member,checkpoint,m4b);
     console.log('PHASE 2B: live preview Owner/Member Room/Invite/Activity/Revocation PASS');
   } catch {
     testFailure=true;

@@ -184,4 +184,8 @@ jobs:
           STAGING_E2E_PHASE2B_CLEANUP_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_PHASE2B_CLEANUP_SERVICE_ACCOUNT }}
           GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.signer.outputs.access_token }}
           STAGING_E2E_PHASE2B_CLEANUP_TOKEN: ${{ steps.cleanup.outputs.access_token }}
+          # Explicit manual opt-in only. Never activated by weekly schedule.
+          # Requires a separately reviewed named-database Rules release.
+          STAGING_E2E_M4B_LIVE_APPROVED: ${{ vars.STAGING_E2E_M4B_LIVE_APPROVED }}
+          STAGING_E2E_M4B_RULES_RELEASE_VERIFIED: ${{ vars.STAGING_E2E_M4B_RULES_RELEASE_VERIFIED }}
         run: node scripts/staging-e2e/phase2b/run.mjs
