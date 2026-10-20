@@ -141,10 +141,24 @@ export async function verifyMergedMainCi(sha,env=process.env,fetchImpl=fetch) {
   const prs=await apiJson('/repos/'+REPO+'/commits/'+sha+'/pulls?per_page=100',env,fetchImpl);
   const pr=parseMergedPr(prs,sha);
   for(const workflow of REQUIRED_WORKFLOWS){
-    const route='/repos/'+REPO+'/actions/workflows/'+workflow.filename+
-      '/runs?event=pull_request&head_sha='+encodeURIComponent(pr.head.sha)+'&per_page=100';
-    const listing=await apiJson(route,env,fetchImpl);
-    assert.ok(verifiedWorkflowRun(listing.workflow_runs,workflow,pr),
+    // Do NOT filter the Actions API query by head_sha: pull_request workflows
+    // can have a synthetic merge SHA instead of the original PR HEAD SHA.
+    // Verify the exact PR number and actual PR HEAD from returned metadata.
+    // Read a bounded number of pages; missing history must fail CLOSED.
+    let passed=false;
+    for(let page=1;page<=5;page++){
+      const route='/repos/'+REPO+'/actions/workflows/'+workflow.filename+
+        '/runs?event=pull_request&per_page=100&page='+page;
+      const listing=await apiJson(route,env,fetchImpl);
+      assert.ok(Array.isArray(listing.workflow_runs),
+        'Invalid GitHub Actions workflow listing');
+      if(verifiedWorkflowRun(listing.workflow_runs,workflow,pr)){
+        passed=true;
+        break;
+      }
+      if(listing.workflow_runs.length<100)break;
+    }
+    assert.ok(passed,
       'Missing passed '+workflow.name+' for exact merged PR head commit');
   }
   return pr.number;
