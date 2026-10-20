@@ -48,7 +48,15 @@ export async function listPrivateRoomCalendar(
 
   // Owner list is explicitly bound to creator and limited by existing Rules.
   const ownerLists = await Promise.all(rooms.filter(room=>room.role==='owner').map(
-    async room=>({room, events:await listOwnedRoomActivities(user,room.id)}),
+    async room=>{
+      const [events,members]=await Promise.all([
+        listOwnedRoomActivities(user,room.id),
+        listRoomMembers(user,room.id),
+      ]);
+      return {room,events,activeMemberUids:new Set(members
+        .filter(member=>member.role==='member').map(member=>member.uid)),
+        memberListTruncated:members.length===20};
+    },
   ));
   // Accepted private recipient can only fetch by ID; a general room events
   // collection query would fail Rules and leak hidden private existence.
