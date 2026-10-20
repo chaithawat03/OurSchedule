@@ -111,7 +111,15 @@ export function verifiedWorkflowRun(runs,workflow,pr) {
 export async function verifyWorkflowRunSource(run,workflow,pr,env=process.env,fetchImpl=fetch) {
   if(!workflowRunMatchesIdentity(run,workflow))return false;
   if(verifiedWorkflowRun([run],workflow,pr))return true;
-  const associated=run.head_branch===pr.head.ref ||
+  // A deleted source branch can make run.head_branch null. A bounded
+  // PR-lifetime time match ONLY nominates a run for ancestry verification;
+  // it never by itself counts as a passing CI run.
+  const created=Date.parse(run.created_at??'');
+  const from=Date.parse(pr.created_at??'');
+  const until=Date.parse(pr.merged_at??'');
+  const inPrLifetime=Number.isFinite(created)&&Number.isFinite(from)&&
+    Number.isFinite(until)&&created>=from-60_000&&created<=until+60_000;
+  const associated=run.head_branch===pr.head.ref || inPrLifetime ||
     (Array.isArray(run.pull_requests)&&run.pull_requests.some(p=>p.number===pr.number));
   if(!associated || !SHA.test(run.head_sha??''))return false;
   if(run.head_sha===pr.head.sha)return true;
@@ -186,7 +194,12 @@ export async function verifyMergedMainCi(sha,env=process.env,fetchImpl=fetch) {
       const candidates=listing.workflow_runs.filter(run =>
         workflowRunMatchesIdentity(run,workflow) &&
         (run.head_branch===pr.head.ref ||
-          run.pull_requests?.some(p=>p.number===pr.number)));
+          run.pull_requests?.some(p=>p.number===pr.number) ||
+          (Number.isFinite(Date.parse(run.created_at??'')) &&
+            Number.isFinite(Date.parse(pr.created_at??'')) &&
+            Number.isFinite(Date.parse(pr.merged_at??'')) &&
+            Date.parse(run.created_at)>=Date.parse(pr.created_at)-60_000 &&
+            Date.parse(run.created_at)<=Date.parse(pr.merged_at)+60_000))));
       assert.ok(candidates.length<=12,
         'Ambiguous workflow run metadata; manual CI review required');
       for(const run of candidates){
