@@ -82,7 +82,7 @@ export async function listPrivateRoomCalendar(
     }
   }));
 
-  const ownerEvents: CalendarEvent[] = ownerLists.flatMap(({room,events}) =>
+  const ownerEvents: CalendarEvent[] = ownerLists.flatMap(({room,events,activeMemberUids}) =>
     events.filter(event=>
       event.status==='active' &&
       event.assignmentState==='ACCEPTED' &&
