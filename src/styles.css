@@ -56,3 +56,23 @@
 .day-agenda-details p{font-size:12px;color:#557184;line-height:1.5;margin:6px 0}
 .day-agenda-details small{display:block;margin-top:6px;color:#6f8596;font-size:11px}
 @media(max-width:470px){.day-agenda-item{grid-template-columns:1fr;gap:5px}.day-agenda-time{font-size:12px}}
+
+/* M4a: visibility toggles affect only the signed-in user's PRIVATE calendar. */
+.room-calendar-filters{margin:20px 0 0;background:#fff;border:1px solid #dce8f1;
+  border-radius:12px;padding:clamp(14px,3vw,20px);box-shadow:0 4px 16px #1d3a5605}
+.room-calendar-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.room-calendar-heading h2{font-size:16px;margin:0 0 5px}
+.room-calendar-filters p{font-size:12px;line-height:1.6;color:#667f91;margin:4px 0 12px}
+.room-calendar-filters p.room-error{color:#a02838}
+.room-calendar-heading button{border:1px solid #cddfea;border-radius:8px;background:#eff7fc;
+  min-height:40px;color:#215776;font-size:12px;font-weight:700;padding:9px 12px;white-space:nowrap}
+.room-calendar-heading button:disabled{opacity:.6}
+.room-calendar-options{display:flex;flex-wrap:wrap;gap:9px}
+.room-calendar-options label{display:flex;align-items:center;gap:9px;border:1px solid #dce7ef;
+  background:#f8fbfe;border-radius:9px;padding:9px 12px;font-size:12px;max-width:100%;
+  overflow-wrap:anywhere;cursor:pointer}
+.room-calendar-options input{width:17px;height:17px;accent-color:#235c7c;flex-shrink:0}
+.day-agenda-source{font-weight:650;color:#357598}
+@media(max-width:570px){.room-calendar-heading{flex-direction:column}
+  .room-calendar-heading button{width:100%}.room-calendar-options{flex-direction:column}
+  .room-calendar-options label{width:100%}}
