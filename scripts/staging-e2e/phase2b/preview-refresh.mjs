@@ -90,7 +90,9 @@ export function validateCliResult(stdout, expectedOrigin) {
   // --json is the Firebase CLI machine-readable API, not human log output.
   const result=JSON.parse(stdout);
   assert.equal(result.status,'success','Firebase preview deploy did not succeed');
-  const item=result.result?.default;
+  const targets=Object.values(result.result ?? {});
+  assert.equal(targets.length,1,'Firebase CLI deployed unexpected Hosting targets');
+  const item=targets[0];
   assert.equal(item?.site,SITE,'Firebase CLI selected a different site');
   assert.equal(item?.url,expectedOrigin,'Firebase CLI changed the preview URL');
   assert.ok(Date.parse(item?.expireTime) > Date.now() + 20 * 86400_000,
