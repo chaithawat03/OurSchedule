@@ -10,6 +10,7 @@ import { bangkokYearMonth, monthGrid, shiftMonth } from './lib/monthGrid';
 import { listPrivateRoomCalendar } from './services/roomCalendar';
 import { mergedCalendarEvents, type CalendarEvent, type CalendarRoom } from './lib/unifiedCalendar';
 
+const EMPTY_PERSONAL_EVENTS: PersonalActivity[] = [];
 type View = 'day' | 'month' | 'multi';
 const viewNames: Record<View, string> = { day: 'รายวัน', month: 'รายเดือน', multi: 'หลายเดือน' };
 const weekdays = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
@@ -62,6 +63,7 @@ export default function App() {
   const nextMonth = shiftMonth(cursor.year, cursor.monthIndex, 1);
   const user = identity.state.status === 'ready' ? identity.state.user : null;
   const [events, setEvents] = useState<PersonalActivity[]>([]);
+  const [eventsUid, setEventsUid] = useState('');
   const [eventsBusy, setEventsBusy] = useState(false);
   const [eventsError, setEventsError] = useState('');
   const [truncated, setTruncated] = useState(false);
@@ -78,9 +80,12 @@ export default function App() {
   const currentRoomState = user && roomState?.uid === user.uid ? roomState : null;
   const hiddenRoomIds = useMemo(() => new Set(user && hiddenState.uid===user.uid ?
     hiddenState.ids : []), [hiddenState, user?.uid]);
+  // Previous Firebase UID's private personal data must not be rendered even
+  // for a single frame while React reloads after an account switch.
+  const personalEvents = user && eventsUid === user.uid ? events : EMPTY_PERSONAL_EVENTS;
   const visibleEvents = useMemo(() =>
-    mergedCalendarEvents(events, currentRoomState?.events ?? [], hiddenRoomIds),
-    [events, currentRoomState, hiddenRoomIds]);
+    mergedCalendarEvents(personalEvents, currentRoomState?.events ?? [], hiddenRoomIds),
+    [personalEvents, currentRoomState, hiddenRoomIds]);
   const toggleRoom = (id:string) => {
     if (!user) return;
     setHiddenState(previous => {
@@ -90,12 +95,14 @@ export default function App() {
     });
   };
   useEffect(() => {
-    if (!user) { setEvents([]); setEventsError(''); setTruncated(false); return; }
+    if (!user) { setEvents([]); setEventsUid(''); setEventsError(''); setTruncated(false); return; }
     let active = true;
-    setEventsBusy(true); setEventsError('');
+    setEventsBusy(true); setEventsUid(''); setEventsError('');
     void listPersonalActivities(user, cursor.year, cursor.monthIndex, view === 'multi')
-      .then((result) => { if (active) { setEvents(result.events); setTruncated(result.truncated); } })
-      .catch(() => { if (active) { setEvents([]); setEventsError('ไม่สามารถโหลดกิจกรรมส่วนตัวได้'); } })
+      .then((result) => { if (active) {
+        setEvents(result.events); setEventsUid(user.uid); setTruncated(result.truncated);
+      } })
+      .catch(() => { if (active) { setEvents([]); setEventsUid(''); setEventsError('ไม่สามารถโหลดกิจกรรมส่วนตัวได้'); } })
       .finally(() => { if (active) setEventsBusy(false); });
     return () => { active = false; };
   }, [user, cursor.year, cursor.monthIndex, view, reload]);
@@ -184,7 +191,7 @@ export default function App() {
             </div>
           )}
           <PersonalActivityPanel key={user?.uid ?? 'signed-out'} user={user} day={selected}
-            events={events} busy={eventsBusy} error={eventsError} truncated={truncated}
+            events={personalEvents} busy={eventsBusy} error={eventsError} truncated={truncated}
             onUpdated={() => setReload((value) => value + 1)} />
           <p className="footnote">● M4a: PRIVATE ที่คุณเป็นเจ้าของหรือได้รับสิทธิ์เท่านั้น · ROOM/BUSY_ONLY อยู่ในแผนถัดไป <span>·</span> {dateHeading}</p>
         </main>
