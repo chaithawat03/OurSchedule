@@ -65,6 +65,10 @@ jobs:
           node --check scripts/staging-e2e/phase2b/cleanup.mjs
           node --check scripts/staging-e2e/phase2b/preview-refresh.mjs
           node --check tests/staging/phase2b-auth-bootstrap.js
+      - name: Offline Staging Auto Deploy safety and exact PR CI gate tests
+        run: |
+          node --test tests/tools/staging-deploy.unit.test.mjs
+          node --check scripts/staging-deploy/run.mjs
       - name: Check staging release script syntax (no deployment in CI)
         run: bash -n scripts/release-m2-staging.sh
       - name: Check M3 staging release script syntax (no deployment in CI)
