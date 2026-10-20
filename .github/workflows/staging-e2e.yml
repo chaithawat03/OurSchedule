@@ -56,12 +56,83 @@ jobs:
         run: node scripts/staging-e2e/run.mjs
 
 
+  # Isolated WIF Hosting deployer: refreshes ONLY p2b-e2e Preview Channel.
+  # This is deliberately separate from the Firebase Auth signer and named-DB cleanup.
+  # Existing WIF provider permits only canonical main staging-e2e.yml.
+  staging-preview-refresh:
+    needs: staging-read-isolation
+    if: >-
+      github.repository == 'chaithawat03/OurSchedule' &&
+      github.ref == 'refs/heads/main' &&
+      vars.STAGING_E2E_PHASE2B_ENABLED == 'true' &&
+      vars.STAGING_E2E_PHASE2B_DELETE_APPROVED == 'true' &&
+      vars.STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED == 'true' &&
+      vars.STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED == 'true'
+    environment: staging-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked packages
+        run: npm ci --no-audit --no-fund
+      - name: Validate Preview-only source and project guards
+        env:
+          STAGING_E2E_ENABLED: ${{ vars.STAGING_E2E_ENABLED }}
+          STAGING_E2E_APPROVE_PERSISTENT_PROFILES: ${{ vars.STAGING_E2E_APPROVE_PERSISTENT_PROFILES }}
+          STAGING_E2E_PHASE2B_ENABLED: ${{ vars.STAGING_E2E_PHASE2B_ENABLED }}
+          STAGING_E2E_PHASE2B_DELETE_APPROVED: ${{ vars.STAGING_E2E_PHASE2B_DELETE_APPROVED }}
+          STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED }}
+          STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED }}
+          STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT }}
+          STAGING_E2E_PHASE2B_PREVIEW_URL: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_URL }}
+          STAGING_E2E_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+          STAGING_E2E_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+        run: node scripts/staging-e2e/phase2b/preview-refresh.mjs validate
+      - name: Build pinned-source Preview bundle with no cloud credentials
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ourschedule.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: ourschedule
+          VITE_FIREBASE_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+          VITE_PHASE2B_PREVIEW: '1'
+          VITE_PHASE2B_DATABASE_ID: ourschedule-e2e
+          VITE_E2E_BUILD_SHA: ${{ github.sha }}
+        run: npm run build
+      - name: Exchange canonical GitHub OIDC for Hosting preview deployer
+        id: preview-auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.STAGING_E2E_WIF_PROVIDER }}
+          service_account: ${{ vars.STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Refresh pinned Firebase Hosting PREVIEW only (never live)
+        env:
+          STAGING_E2E_ENABLED: ${{ vars.STAGING_E2E_ENABLED }}
+          STAGING_E2E_APPROVE_PERSISTENT_PROFILES: ${{ vars.STAGING_E2E_APPROVE_PERSISTENT_PROFILES }}
+          STAGING_E2E_PHASE2B_ENABLED: ${{ vars.STAGING_E2E_PHASE2B_ENABLED }}
+          STAGING_E2E_PHASE2B_DELETE_APPROVED: ${{ vars.STAGING_E2E_PHASE2B_DELETE_APPROVED }}
+          STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_REFRESH_ENABLED }}
+          STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_DEPLOY_APPROVED }}
+          STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT: ${{ vars.STAGING_E2E_PHASE2B_HOSTING_SERVICE_ACCOUNT }}
+          STAGING_E2E_PHASE2B_PREVIEW_URL: ${{ vars.STAGING_E2E_PHASE2B_PREVIEW_URL }}
+          STAGING_E2E_API_KEY: ${{ vars.STAGING_E2E_API_KEY }}
+          STAGING_E2E_APP_ID: ${{ vars.STAGING_E2E_APP_ID }}
+          STAGING_E2E_PHASE2B_HOSTING_ACCESS_TOKEN: ${{ steps.preview-auth.outputs.access_token }}
+        run: node scripts/staging-e2e/phase2b/preview-refresh.mjs deploy
+
   # Phase 2b is an independent, double-opt-in job. It never runs from a PR;
   # waiting for the verified Phase 2a job prevents concurrent use of fixed UIDs.
   # Its cleanup OAuth token MUST belong to a different SA with conditional
   # Firestore IAM access to database ourschedule-e2e ONLY.
   staging-room-activity-preview:
-    needs: staging-read-isolation
+    needs: [staging-read-isolation, staging-preview-refresh]
     if: >-
       github.repository == 'chaithawat03/OurSchedule' &&
       github.ref == 'refs/heads/main' &&
