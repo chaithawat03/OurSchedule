@@ -100,6 +100,6 @@ export async function listPrivateRoomCalendar(
     // inbox records. Never imply the calendar is complete when at the cap.
     truncated:owned.length===20 || joined.length===20 ||
       allRooms.length>rooms.length || inbox.length===20 ||
-      ownerLists.some(item=>item.events.length===20),
+      ownerLists.some(item=>item.events.length===20 || item.memberListTruncated),
   };
 }
