@@ -114,3 +114,25 @@ the Staging Auto Deploy trigger on a newly merged, green PR.
 Auto Deploy smoke test. This feature requires a separate reviewed PR and
 a Firestore Rules release gate, because Hosting-only Auto Deploy cannot
 deploy Firestore Rules.
+
+## M4b initial code artifact: safe read model (not enabled)
+
+`src/lib/roomProjection.ts` now implements a strict, *pure* defensive parser
+for the proposed **minimal** projection contract, with unit tests:
+
+- ROOM: exactly `{roomId,visibility,startAt,endAt,allDay,title}`.
+- BUSY_ONLY: exactly `{roomId,visibility,startAt,endAt,allDay}`.
+- PRIVATE: no projection, always rejected.
+- No `creatorUid`, `sourceEventId`, `notes`, `recipientUid`, profile
+  data, arbitrary metadata, or hidden source identifiers are accepted.
+- Shared ROOM titles are bounded to 120 characters. BUSY_ONLY becomes
+  the generic Thai label `ไม่ว่าง` in the UI view model.
+- Inputs must be valid, ordered timestamps no more than 24 hours apart
+  and refer to the exact authorized room ID.
+
+**These checks do not prevent data leakage if server-side Firestore Rules
+allow a document containing sensitive fields to be fetched.** The query and
+new Rules are deliberately absent; the parser is currently not wired to
+any Firestore reads or UI components. Separate implementation and security
+approval are required before shared calendar data is accessible.
+
