@@ -199,7 +199,7 @@ export async function verifyMergedMainCi(sha,env=process.env,fetchImpl=fetch) {
             Number.isFinite(Date.parse(pr.created_at??'')) &&
             Number.isFinite(Date.parse(pr.merged_at??'')) &&
             Date.parse(run.created_at)>=Date.parse(pr.created_at)-60_000 &&
-            Date.parse(run.created_at)<=Date.parse(pr.merged_at)+60_000))));
+            Date.parse(run.created_at)<=Date.parse(pr.merged_at)+60_000)));
       assert.ok(candidates.length<=12,
         'Ambiguous workflow run metadata; manual CI review required');
       for(const run of candidates){
