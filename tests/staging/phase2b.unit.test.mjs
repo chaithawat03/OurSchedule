@@ -145,3 +145,20 @@ test('unknown user aborts BEFORE all deletes',async()=>{
   await assert.rejects(cleanIsolatedDatabase('T'.repeat(75),fetchImpl));
   assert.equal(deletes,0);
 });
+
+
+test('live test selects removable member, not ambiguous shared UID prefix',()=>{
+  // Both real synthetic test users display as e2e_stag… in MemberManager.
+  assert.equal(OWNER_UID.slice(0,8),MEMBER_UID.slice(0,8));
+  const src=readFileSync('scripts/staging-e2e/phase2b/run.mjs','utf8');
+  assert.doesNotMatch(src,/filter\(\{hasText:MEMBER_UID\.slice\(0,8\)\}\)/);
+  assert.match(src,/\.room-members li'\)\.filter\(\{\s*has:\s*owner\.page\.getByRole\('button',\{name:'ลบสมาชิก',exact:true\}\)/);
+  assert.match(src,/expect\(row\)\.toHaveCount\(1\)/);
+  // A failure records only an allowlisted stage, never an arbitrary Auth error.
+  assert.match(src,/console\.error\('PHASE 2B: live test FAILED at '\+stage\+' \(sanitized\)'\)/);
+  for(const stage of ['room-create','room-invite-and-join','accept-private-activity',
+    'sweetalert-cancel-and-rollback','decline-private-activity',
+    'prepare-revocation','member-revocation','revocation-rules-denials']) {
+    assert.ok(src.includes("checkpoint('"+stage+"')"),'Missing checkpoint: '+stage);
+  }
+});
