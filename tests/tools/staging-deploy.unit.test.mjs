@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   assertStagingBuildEnvironment, validateEnvironment, validateHostingConfig,
-  parseMergedPr, verifiedWorkflowRun, makeVersion, verifyVersion,
+  parseMergedPr, verifiedWorkflowRun, verifyWorkflowRunSource,
+  workflowRunMatchesIdentity, makeVersion, verifyVersion,
   verifyMergedMainCi, assertLatestMain,
 } from '../../scripts/staging-deploy/run.mjs';
 
@@ -28,13 +29,17 @@ const build={
 };
 const pr={
   number:28,merge_commit_sha:sha,merged_at:'2026-10-20T00:00:00Z',
-  state:'closed',base:{ref:'main',repo:{full_name:REPO}},
+  state:'closed',created_at:'2026-10-20T05:12:39Z',
+  merged_at:'2026-10-20T05:14:08Z',
+  base:{ref:'main',repo:{full_name:REPO}},
   head:{sha:head,ref:'feature-branch'},
 };
 const successRun=(name,filename)=>({
   name,path:'.github/workflows/'+filename,
   event:'pull_request',status:'completed',conclusion:'success',
-  head_sha:'c'.repeat(40),pull_requests:[{number:28,head:{sha:head},base:{ref:'main'}}],
+  head_sha:'c'.repeat(40),head_branch:'feature-branch',
+  created_at:'2026-10-20T05:13:10Z',
+  pull_requests:[{number:28,head:{sha:head},base:{ref:'main'}}],
 });
 const fakeFetch=(overrides={})=>async (url,init)=>{
   assert.ok(url.startsWith('https://api.github.com/repos/'+REPO+'/'));
@@ -47,6 +52,8 @@ const fakeFetch=(overrides={})=>async (url,init)=>{
   const page=Number(u.searchParams.get('page')??1);
   const data=p.endsWith('/git/ref/heads/main')?{object:{sha:overrides.latest??sha}}:
     p.endsWith('/commits/'+sha)?{sha,parents:overrides.parents??[{sha:'1'},{sha:'2'}]}:
+    p.endsWith('/commits/'+'c'.repeat(40))?
+      {sha:'c'.repeat(40),parents:overrides.syntheticParents??[{sha:'base'},{sha:head}]}:
     p.endsWith('/commits/'+sha+'/pulls')?(overrides.prs??[pr]):
     p.endsWith('/actions/workflows/pr-ci.yml/runs')?
       {workflow_runs:overrides.ciPages?.[page]??overrides.ci??[successRun('PR CI','pr-ci.yml')]}:
@@ -131,7 +138,9 @@ test('gate passes only if both real PR workflows succeeded for exact head SHA',a
 test('PR verification checks bounded historical pages without relying on synthetic merge head_sha',async()=>{
   const unrelated=Array.from({length:100},(_,index)=>({
     ...successRun('PR CI','pr-ci.yml'),
-    pull_requests:[{number:123+index,head:{sha:head},base:{ref:'main'}}],
+    head_branch:'unrelated-branch',
+    created_at:'2026-10-18T00:00:00Z',
+    pull_requests:[{number:123+index,head:{sha:'d'.repeat(40)},base:{ref:'main'}}],
   }));
   const result=await verifyMergedMainCi(sha,env,fakeFetch({
     ciPages:{1:unrelated,2:[successRun('PR CI','pr-ci.yml')]},
@@ -141,9 +150,54 @@ test('PR verification checks bounded historical pages without relying on synthet
     ...successRun('PR CI','pr-ci.yml'),
     pull_requests:[{number:999,head:{sha:head},base:{ref:'main'}}],
   }));
+  // A hundred ambiguous runs on the same PR branch MUST fail closed.
   await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
     ciPages:{1:neverMatch,2:neverMatch,3:neverMatch,4:neverMatch,5:neverMatch},
+  })),/Ambiguous workflow run metadata/);
+  // Unrelated historical runs without plausible linkage are skipped safely.
+  await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
+    ciPages:{1:unrelated,2:unrelated,3:unrelated,4:unrelated,5:unrelated},
   })),/Missing passed PR CI/);
+});
+
+test('GitHub Actions workflow path accepts GitHub @ref suffix but rejects other files',()=>{
+  const wf={name:'PR CI',filename:'pr-ci.yml'};
+  const decorated={...successRun('PR CI','pr-ci.yml'),
+    path:'.github/workflows/pr-ci.yml@refs/pull/28/merge'};
+  assert.equal(workflowRunMatchesIdentity(decorated,wf),true);
+  assert.equal(verifiedWorkflowRun([decorated],wf,pr),true);
+  assert.equal(workflowRunMatchesIdentity({...decorated,path:'.github/workflows/staging-deploy.yml'},wf),false);
+  assert.equal(workflowRunMatchesIdentity({...decorated,conclusion:'failure'},wf),false);
+});
+
+test('empty PR association after merging requires exact synthetic merge parent SHA',async()=>{
+  const wf={name:'PR CI',filename:'pr-ci.yml'};
+  const noPRs={...successRun('PR CI','pr-ci.yml'),pull_requests:[],
+    path:'.github/workflows/pr-ci.yml@refs/pull/28/merge'};
+  assert.equal(verifiedWorkflowRun([noPRs],wf,pr),false);
+  assert.equal(await verifyWorkflowRunSource(noPRs,wf,pr,env,fakeFetch()),true);
+  assert.equal(await verifyMergedMainCi(sha,env,fakeFetch({
+    ci:[noPRs],
+    e2e:[{...successRun('Emulator E2E','emulator-e2e.yml'),pull_requests:[]}],
+  })),28);
+  assert.equal(await verifyWorkflowRunSource(noPRs,wf,pr,env,
+    fakeFetch({syntheticParents:[{sha:'base'},{sha:'wrong'}]})),false);
+  await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
+    ci:[noPRs],
+    syntheticParents:[{sha:'base'},{sha:'wrong'}],
+  })),/Missing passed PR CI/);
+});
+
+test('deleted PR branch requires both plausible run time and exact merge ancestry',async()=>{
+  const wf={name:'PR CI',filename:'pr-ci.yml'};
+  const deleted={...successRun('PR CI','pr-ci.yml'),
+    head_branch:null,pull_requests:[],
+    path:'.github/workflows/pr-ci.yml@refs/pull/28/merge'};
+  assert.equal(await verifyWorkflowRunSource(deleted,wf,pr,env,fakeFetch()),true);
+  assert.equal(await verifyWorkflowRunSource({...deleted,created_at:'2026-01-01T00:00:00Z'},
+    wf,pr,env,fakeFetch()),false);
+  assert.equal(await verifyWorkflowRunSource({...deleted,created_at:'2026-10-20T05:13:10Z'},
+    wf,pr,env,fakeFetch({syntheticParents:[{sha:'base'},{sha:'d'.repeat(40)}]})),false);
 });
 
 test('stale queued pushes cannot deploy after main has moved',async()=>{

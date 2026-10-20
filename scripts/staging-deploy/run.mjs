@@ -78,23 +78,63 @@ export function parseMergedPr(prs,sha) {
   return matches[0];
 }
 
-export function verifiedWorkflowRun(runs,workflow,pr) {
-  assert.ok(Array.isArray(runs),'Invalid workflow runs response');
-  // For pull_request events, Actions run.head_sha points to GitHub's
-  // synthetic refs/pull/N/merge commit, not the PR HEAD commit. The exact
-  // PR head is instead provided inside run.pull_requests[].head.sha.
-  // Do not allow an earlier green run of the same PR to authorize a new head.
-  return runs.some(run =>
-    run.name===workflow.name &&
-    run.path==='.github/workflows/'+workflow.filename &&
+// Actions API run.path can include an @refs/heads/... or @refs/pull/... suffix.
+// The pull_requests[] array may also be empty, or may omit nested head/base
+// metadata after PR merge. The original test source must still be verified.
+export function workflowRunMatchesIdentity(run,workflow) {
+  return run?.name===workflow.name &&
+    typeof run.path==='string' &&
+    run.path.split('@')[0]==='.github/workflows/'+workflow.filename &&
     run.event==='pull_request' &&
     run.status==='completed' && run.conclusion==='success' &&
+    (!run.head_repository?.full_name || run.head_repository.full_name===REPO);
+}
+
+export function verifiedWorkflowRun(runs,workflow,pr) {
+  assert.ok(Array.isArray(runs),'Invalid workflow runs response');
+  return runs.some(run =>
+    workflowRunMatchesIdentity(run,workflow) &&
     Array.isArray(run.pull_requests) &&
     run.pull_requests.some(p =>
       p.number===pr.number &&
       p.head?.sha===pr.head.sha &&
-      p.base?.ref==='main')
+      (!p.base?.ref || p.base.ref==='main'))
   );
+}
+
+/**
+ * Fallback for merged PRs whose Actions pull_requests[] entries are empty.
+ * A successful check against a synthetic pull_request merge commit is valid
+ * ONLY when its second Git parent equals the exact merged PR HEAD commit.
+ * Merely matching branch name / PR number is never sufficient.
+ */
+export async function verifyWorkflowRunSource(run,workflow,pr,env=process.env,fetchImpl=fetch) {
+  if(!workflowRunMatchesIdentity(run,workflow))return false;
+  if(verifiedWorkflowRun([run],workflow,pr))return true;
+  // If GitHub supplies associations, conflicting PR number/head/base metadata
+  // is explicit evidence against this run. Never override it via ancestry.
+  if(Array.isArray(run.pull_requests)&&run.pull_requests.length){
+    const matching=run.pull_requests.filter(p=>p.number===pr.number);
+    if(matching.length===0 ||
+        matching.some(p=>p.head?.sha && p.head.sha!==pr.head.sha) ||
+        matching.some(p=>p.base?.ref && p.base.ref!=='main'))return false;
+  }
+  // A deleted source branch can make run.head_branch null. A bounded
+  // PR-lifetime time match ONLY nominates a run for ancestry verification;
+  // it never by itself counts as a passing CI run.
+  const created=Date.parse(run.created_at??'');
+  const from=Date.parse(pr.created_at??'');
+  const until=Date.parse(pr.merged_at??'');
+  const inPrLifetime=Number.isFinite(created)&&Number.isFinite(from)&&
+    Number.isFinite(until)&&created>=from-60_000&&created<=until+60_000;
+  const associated=run.head_branch===pr.head.ref || inPrLifetime ||
+    (Array.isArray(run.pull_requests)&&run.pull_requests.some(p=>p.number===pr.number));
+  if(!associated || !SHA.test(run.head_sha??''))return false;
+  if(run.head_sha===pr.head.sha)return true;
+  const commit=await apiJson('/repos/'+REPO+'/commits/'+run.head_sha,env,fetchImpl);
+  return commit.sha===run.head_sha &&
+    commit.parents?.length===2 &&
+    commit.parents[1]?.sha===pr.head.sha;
 }
 
 export function makeVersion(sha) {
@@ -152,10 +192,36 @@ export async function verifyMergedMainCi(sha,env=process.env,fetchImpl=fetch) {
       const listing=await apiJson(route,env,fetchImpl);
       assert.ok(Array.isArray(listing.workflow_runs),
         'Invalid GitHub Actions workflow listing');
+      // First trust direct exact PR/HEAD associations. If Actions omits
+      // those associations after the PR is merged, verify a synthetic merge
+      // commit's second parent before trusting the green workflow.
       if(verifiedWorkflowRun(listing.workflow_runs,workflow,pr)){
         passed=true;
         break;
       }
+      const candidates=listing.workflow_runs.filter(run =>
+        workflowRunMatchesIdentity(run,workflow) &&
+        (run.head_branch===pr.head.ref ||
+          run.pull_requests?.some(p=>p.number===pr.number) ||
+          (Number.isFinite(Date.parse(run.created_at??'')) &&
+            Number.isFinite(Date.parse(pr.created_at??'')) &&
+            Number.isFinite(Date.parse(pr.merged_at??'')) &&
+            Date.parse(run.created_at)>=Date.parse(pr.created_at)-60_000 &&
+            Date.parse(run.created_at)<=Date.parse(pr.merged_at)+60_000)));
+      assert.ok(candidates.length<=12,
+        'Ambiguous workflow run metadata; manual CI review required');
+      for(const run of candidates){
+        try {
+          if(await verifyWorkflowRunSource(run,workflow,pr,env,fetchImpl)){
+            passed=true;
+            break;
+          }
+        }catch {
+          // A missing/deleted synthetic merge commit is not proof of success.
+          // Continue to check other bounded candidates, then fail closed.
+        }
+      }
+      if(passed)break;
       if(listing.workflow_runs.length<100)break;
     }
     assert.ok(passed,
