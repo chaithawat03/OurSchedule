@@ -51,7 +51,7 @@ export async function listPrivateRoomCalendar(
   ));
   // Accepted private recipient can only fetch by ID; a general room events
   // collection query would fail Rules and leak hidden private existence.
-  const recipientEvents = await Promise.all(accepted.map(async invitation => {
+  const recipientEvents = await Promise.all(accepted.map(async (invitation): Promise<CalendarEvent | null> => {
     try {
       const activity = await getAssignedPrivateRoomActivity(
         user, invitation.roomId, invitation.eventId);
