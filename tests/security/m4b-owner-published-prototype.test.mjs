@@ -79,9 +79,10 @@ describe('M4b owner-published shared calendar: isolated emulator prototype only'
 
   it('requires atomic owner quota and rejects forged owner/recipient creation',async()=>{
     await assertFails(setDoc(doc(db(a),path(room,'no-quota')),busy()));
-    const wrong=writeBatch(db(a));
-    await includeQuota(wrong,db(a),a,'roomEvents','another-resource');
-    wrong.set(doc(db(a),path(room,'wrong-quota')),busy());
+    const ownerDb=db(a);
+    const wrong=writeBatch(ownerDb);
+    await includeQuota(wrong,ownerDb,a,'roomEvents','another-resource');
+    wrong.set(doc(ownerDb,path(room,'wrong-quota')),busy());
     await assertFails(wrong.commit());
     await assertFails(setDoc(doc(db(b),path(room,'by-member')),named()));
     await assertFails(setDoc(doc(db(c),path(room,'by-stranger')),busy()));
