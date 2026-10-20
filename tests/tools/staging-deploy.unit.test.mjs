@@ -34,7 +34,7 @@ const pr={
 const successRun=(name,filename)=>({
   name,path:'.github/workflows/'+filename,
   event:'pull_request',status:'completed',conclusion:'success',
-  head_sha:head,pull_requests:[{number:28}],
+  head_sha:'c'.repeat(40),pull_requests:[{number:28,head:{sha:head},base:{ref:'main'}}],
 });
 const fakeFetch=(overrides={})=>async (url,init)=>{
   assert.ok(url.startsWith('https://api.github.com/repos/'+REPO+'/'));
@@ -100,8 +100,10 @@ test('merged pull must correspond to current 2-parent main commit',()=>{
   const wf={name:'PR CI',filename:'pr-ci.yml'};
   assert.equal(verifiedWorkflowRun([successRun('PR CI','pr-ci.yml')],wf,pr),true);
   for(const different of [
-    {conclusion:'failure'}, {conclusion:'skipped'}, {head_sha:'c'.repeat(40)},
-    {event:'push'},{pull_requests:[{number:99}]},
+    {conclusion:'failure'}, {conclusion:'skipped'},
+    {event:'push'},{pull_requests:[{number:99,head:{sha:head},base:{ref:'main'}}]},
+    {pull_requests:[{number:28,head:{sha:'d'.repeat(40)},base:{ref:'main'}}]},
+    {pull_requests:[{number:28,head:{sha:head},base:{ref:'production'}}]},
     {path:'.github/workflows/fake-pr-ci.yml'},
   ]) assert.equal(verifiedWorkflowRun([
     {...successRun('PR CI','pr-ci.yml'),...different}],wf,pr),false);
@@ -113,7 +115,7 @@ test('gate passes only if both real PR workflows succeeded for exact head SHA',a
     ci:[{...successRun('PR CI','pr-ci.yml'),conclusion:'failure'}],
   })),/Missing passed PR CI/);
   await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
-    e2e:[{...successRun('Emulator E2E','emulator-e2e.yml'),head_sha:sha}],
+    e2e:[{...successRun('Emulator E2E','emulator-e2e.yml'),pull_requests:[{number:28,head:{sha},base:{ref:'main'}}]}],
   })),/Missing passed Emulator E2E/);
   await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({parents:[{sha:'1'}]})),
     /two-parent/);
