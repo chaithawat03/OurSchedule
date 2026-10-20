@@ -77,3 +77,30 @@ reads of PRIVATE content remain prohibited.
 Until those conditions are met, there is **no shared calendar backend enabled
 on live OurSchedule**. This is a safety design and test-driven proof, not a
 claim of M4b completion.
+
+## Preview-only TypeScript data access (next PR)
+
+The feature service `src/services/sharedCalendarPreview.ts` and its pure
+payload builder `src/lib/sharedCalendarDraft.ts` now provide these
+**disabled-by-default** operations:
+
+- `publishRoomCalendarEntry(owner, roomId, input)` creates a NEW public entry
+  (never from an existing PRIVATE event) and consumes an atomic `roomEvents`
+  quota increment. The server Rules remain the authoritative write gate.
+- `listPublishedRoomCalendar(user, roomId)` performs a **server-only** bounded
+  `limit(20)` list to re-check current Rules / membership, rejects any
+  unexpected projection schema and reports truncation.
+- `withdrawPublishedRoomEntry(owner, roomId, entryId)` deletes an entry;
+  only the current room Owner will be authorized once Rules are deployed.
+
+Every method rejects unless BOTH build-time
+`VITE_PHASE2B_PREVIEW=1` and `VITE_M4B_SHARED_PREVIEW=1` are set and the
+existing Firebase client confirms the **named** Firestore database via
+`document.documentElement.dataset.phase2bDatabase==='ourschedule-e2e'`.
+A normal Hosting Staging build cannot call these operations. They are not
+connected to the UI, and the production Rules continue to deny shared reads.
+
+**NEXT BLOCKER:** The named E2E database currently has the original Rules.
+The experimental Rules are deliberately not deployable yet; a separate
+reviewed Rules release to `ourschedule-e2e`, corresponding E2E Preview build,
+and authenticated two-UID live acceptance are required. No Production release.
