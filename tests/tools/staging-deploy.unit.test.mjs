@@ -39,14 +39,19 @@ const successRun=(name,filename)=>({
 const fakeFetch=(overrides={})=>async (url,init)=>{
   assert.ok(url.startsWith('https://api.github.com/repos/'+REPO+'/'));
   assert.equal(init.headers.authorization,'Bearer '+env.GITHUB_TOKEN);
-  const p=new URL(url).pathname;
+  const u=new URL(url);
+  const p=u.pathname;
+  // Actions pull_request run.head_sha may be a synthetic merge sha; the
+  // gate must examine PR-linked metadata instead of filtering on original SHA.
+  assert.equal(u.searchParams.has('head_sha'),false);
+  const page=Number(u.searchParams.get('page')??1);
   const data=p.endsWith('/git/ref/heads/main')?{object:{sha:overrides.latest??sha}}:
     p.endsWith('/commits/'+sha)?{sha,parents:overrides.parents??[{sha:'1'},{sha:'2'}]}:
     p.endsWith('/commits/'+sha+'/pulls')?(overrides.prs??[pr]):
     p.endsWith('/actions/workflows/pr-ci.yml/runs')?
-      {workflow_runs:overrides.ci??[successRun('PR CI','pr-ci.yml')]}:
+      {workflow_runs:overrides.ciPages?.[page]??overrides.ci??[successRun('PR CI','pr-ci.yml')]}:
     p.endsWith('/actions/workflows/emulator-e2e.yml/runs')?
-      {workflow_runs:overrides.e2e??[successRun('Emulator E2E','emulator-e2e.yml')]}:
+      {workflow_runs:overrides.e2ePages?.[page]??overrides.e2e??[successRun('Emulator E2E','emulator-e2e.yml')]}:
       null;
   assert.ok(data,'Unexpected API endpoint: '+p);
   return {ok:true,json:async()=>data};
@@ -121,6 +126,24 @@ test('gate passes only if both real PR workflows succeeded for exact head SHA',a
     /two-parent/);
   await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({prs:[]})),
     /merged PR/);
+});
+
+test('PR verification checks bounded historical pages without relying on synthetic merge head_sha',async()=>{
+  const unrelated=Array.from({length:100},(_,index)=>({
+    ...successRun('PR CI','pr-ci.yml'),
+    pull_requests:[{number:123+index,head:{sha:head},base:{ref:'main'}}],
+  }));
+  const result=await verifyMergedMainCi(sha,env,fakeFetch({
+    ciPages:{1:unrelated,2:[successRun('PR CI','pr-ci.yml')]},
+  }));
+  assert.equal(result,28);
+  const neverMatch=Array.from({length:100},()=>({
+    ...successRun('PR CI','pr-ci.yml'),
+    pull_requests:[{number:999,head:{sha:head},base:{ref:'main'}}],
+  }));
+  await assert.rejects(verifyMergedMainCi(sha,env,fakeFetch({
+    ciPages:{1:neverMatch,2:neverMatch,3:neverMatch,4:neverMatch,5:neverMatch},
+  })),/Missing passed PR CI/);
 });
 
 test('stale queued pushes cannot deploy after main has moved',async()=>{
